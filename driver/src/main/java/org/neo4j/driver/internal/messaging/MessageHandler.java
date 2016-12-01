@@ -18,33 +18,32 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
 import java.util.Map;
 
 import org.neo4j.driver.v1.Value;
 
-public interface MessageHandler
+public interface MessageHandler<Failure extends Exception>
 {
     // Requests
-    void handleInitMessage( String clientNameAndVersion, Map<String,Value> authToken ) throws IOException;
+    void handleInitMessage( String clientNameAndVersion, Map<String,Value> authToken ) throws Failure;
 
-    void handleRunMessage( String statement, Map<String,Value> parameters ) throws IOException;
+    void handleRunMessage( String statement, Map<String,Value> parameters ) throws Failure;
 
-    void handlePullAllMessage() throws IOException;
+    void handlePullAllMessage() throws Failure;
 
-    void handleDiscardAllMessage() throws IOException;
+    void handleDiscardAllMessage() throws Failure;
 
-    void handleResetMessage() throws IOException;
+    void handleResetMessage() throws Failure;
 
-    void handleAckFailureMessage() throws IOException;
+    void handleAckFailureMessage() throws Failure;
 
     // Responses
-    void handleSuccessMessage( Map<String,Value> meta ) throws IOException;
+    void handleSuccessMessage( Map<String,Value> meta ) throws Failure;
 
-    void handleRecordMessage( Value[] fields ) throws IOException;
+    void handleRecordMessage( Value[] fields ) throws Failure;
 
-    void handleFailureMessage( String code, String message ) throws IOException;
+    void handleFailureMessage( String code, String message ) throws Failure;
 
-    void handleIgnoredMessage() throws IOException;
+    void handleIgnoredMessage() throws Failure;
 
 }

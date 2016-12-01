@@ -18,8 +18,6 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
-
 import static java.lang.String.format;
 
 /**
@@ -41,7 +39,7 @@ public class FailureMessage implements Message
     }
 
     @Override
-    public void dispatch( MessageHandler handler ) throws IOException
+    public <Failure extends Exception> void dispatch( MessageHandler<Failure> handler ) throws Failure
     {
         handler.handleFailureMessage( code, message );
     }

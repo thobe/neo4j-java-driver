@@ -21,12 +21,12 @@ package org.neo4j.driver.internal.net;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.ReadableByteChannel;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
+import org.neo4j.driver.internal.messaging.MessageFormat;
 import org.neo4j.driver.internal.packstream.PackInput;
 import org.neo4j.driver.internal.util.BytePrinter;
-import org.neo4j.driver.v1.exceptions.ClientException;
 
 import static java.lang.Math.min;
 
@@ -58,7 +58,7 @@ public class ChunkedInput implements PackInput
     }
 
     @Override
-    public boolean hasMoreData() throws IOException
+    public boolean hasMoreData()
     {
         return hasMoreDataUnreadInCurrentChunk();
         // TODO change the reading mode to non-blocking so that we could also detect
@@ -67,14 +67,14 @@ public class ChunkedInput implements PackInput
     }
 
     @Override
-    public byte readByte()
+    public byte readByte() throws PackStreamException.InputFailure
     {
         ensure( 1 );
         return buffer.get();
     }
 
     @Override
-    public short readShort()
+    public short readShort() throws PackStreamException.InputFailure
     {
         attempt( 2 );
         if ( remainingData() >= 2 )
@@ -89,7 +89,7 @@ public class ChunkedInput implements PackInput
     }
 
     @Override
-    public int readInt()
+    public int readInt() throws PackStreamException.InputFailure
     {
         attempt( 4 );
         if ( remainingData() >= 4 )
@@ -104,7 +104,7 @@ public class ChunkedInput implements PackInput
     }
 
     @Override
-    public long readLong()
+    public long readLong() throws PackStreamException.InputFailure
     {
         attempt( 8 );
         if ( remainingData() >= 8 )
@@ -119,7 +119,7 @@ public class ChunkedInput implements PackInput
     }
 
     @Override
-    public double readDouble()
+    public double readDouble() throws PackStreamException.InputFailure
     {
         attempt( 8 );
         if ( remainingData() >= 8 )
@@ -134,7 +134,7 @@ public class ChunkedInput implements PackInput
     }
 
     @Override
-    public PackInput readBytes( byte[] into, int offset, int toRead )
+    public PackInput readBytes( byte[] into, int offset, int toRead ) throws PackStreamException.InputFailure
     {
         int toReadFromChunk = min( toRead, freeSpace() );
         ensure( toReadFromChunk );
@@ -153,7 +153,7 @@ public class ChunkedInput implements PackInput
     }
 
     @Override
-    public byte peekByte()
+    public byte peekByte() throws PackStreamException.InputFailure
     {
         ensure( 1 );
         int pos = buffer.position();
@@ -193,10 +193,10 @@ public class ChunkedInput implements PackInput
 
     /**
      * Attempts to read {@code toRead} bytes from the channel, however if {@code freeSpace}, the free space in
-     * current buffer is less than {@Code toRead}, then only {@code freeSpace} bytes will be read.
+     * current buffer is less than {@code toRead}, then only {@code freeSpace} bytes will be read.
      * @param toRead
      */
-    private void attempt( int toRead )
+    private void attempt( int toRead ) throws PackStreamException.InputFailure
     {
         if( toRead == 0 || remainingData() >= toRead )
         {
@@ -210,7 +210,7 @@ public class ChunkedInput implements PackInput
      * Block until {@code toRead} bytes are read from channel
      * @param toRead
      */
-    private void ensure( int toRead )
+    private void ensure( int toRead ) throws PackStreamException.InputFailure
     {
         if( toRead == 0 || remainingData() >= toRead )
         {
@@ -241,25 +241,16 @@ public class ChunkedInput implements PackInput
                 else
                 {
                     int chunkSize = readChunkSize();
-                    if( chunkSize <= 0 )
+                    if( chunkSize <= 0 ) // this is a bit silly, readChunkSize() never returns negative numbers
                     {
-                        throw new ClientException( "Invalid non-positive chunk size: " + chunkSize );
+                        throw new PackStreamException.InvalidChunkSize( chunkSize );
                     }
                     readChunk( chunkSize );
                 }
             }
-            catch( ClosedByInterruptException e )
-            {
-                throw new ClientException(
-                                "Connection to the database was lost because someone called `interrupt()` on the driver thread waiting for a reply. " +
-                                "This normally happens because the JVM is shutting down, but it can also happen because your application code or some " +
-                                "framework you are using is manually interrupting the thread." );
-            }
             catch ( IOException e )
             {
-                String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                throw new ClientException( "Unable to process request: " + message + ", expected: " + toRead +
-                                           " bytes, buffer: \n" + BytePrinter.hex( buffer ), e );
+                throw new PackStreamException.InputFailure( e );
             }
             /* buffer ready for reading again */
         }
@@ -294,19 +285,16 @@ public class ChunkedInput implements PackInput
         return buffer.remaining() > 0 || unreadChunkSize > 0;
     }
 
-
-    private Runnable onMessageComplete = new Runnable()
+    private MessageFormat.Reader.CompletionHandler onMessageComplete = new MessageFormat.Reader.CompletionHandler()
     {
         @Override
-        public void run()
+        public void run() throws PackStreamException.InputFailure
         {
             // the on message complete should only be called when no data unread from the message buffer
             if( hasMoreDataUnreadInCurrentChunk() )
             {
-                throw new ClientException( "Trying to read message complete ending '00 00' while there are more data " +
-                                           "left in the message content unread: buffer [" +
-                                           BytePrinter.hexInOneLine( buffer, buffer.position(), buffer.remaining() ) +
-                                           "], unread chunk size " + unreadChunkSize );
+                throw new PackStreamException.UnexpectedData(
+                        BytePrinter.hexInOneLine( buffer, buffer.position(), buffer.remaining() ), unreadChunkSize );
             }
             try
             {
@@ -314,19 +302,17 @@ public class ChunkedInput implements PackInput
                 int chunkSize = readChunkSize();
                 if ( chunkSize != 0 )
                 {
-                    throw new ClientException( "Expecting message complete ending '00 00', but got " +
-                                               BytePrinter.hex( ByteBuffer.allocate( 2 ).putShort( (short) chunkSize ) ) );
+                    throw new PackStreamException.InvalidChunkSize( chunkSize );
                 }
             }
             catch ( IOException e )
             {
-                throw new ClientException( "Error while receiving message complete ending '00 00'.", e );
+                throw new PackStreamException.InputFailure( e );
             }
-
         }
     };
 
-    public Runnable messageBoundaryHook()
+    public MessageFormat.Reader.CompletionHandler messageBoundaryHook()
     {
         return this.onMessageComplete;
     }

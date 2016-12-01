@@ -21,6 +21,7 @@ package org.neo4j.driver.internal.net.pooling;
 
 import org.junit.Test;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.util.Supplier;
 
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -36,29 +37,29 @@ public class BlockingPooledConnectionQueueTest
 {
     @SuppressWarnings( "unchecked" )
     @Test
-    public void shouldCreateNewConnectionWhenEmpty()
+    public void shouldCreateNewConnectionWhenEmpty() throws PackStreamException
     {
         // Given
         PooledConnection connection = mock( PooledConnection.class );
-        Supplier<PooledConnection> supplier = mock( Supplier.class );
-        when( supplier.get() ).thenReturn( connection );
+        Connector supplier = mock( Connector.class );
+        when( supplier.newConnection() ).thenReturn( connection );
         BlockingPooledConnectionQueue queue = new BlockingPooledConnectionQueue( 10 );
 
         // When
         queue.acquire( supplier );
 
         // Then
-        verify( supplier ).get();
+        verify( supplier ).newConnection();
     }
 
     @SuppressWarnings( "unchecked" )
     @Test
-    public void shouldNotCreateNewConnectionWhenNotEmpty()
+    public void shouldNotCreateNewConnectionWhenNotEmpty() throws PackStreamException
     {
         // Given
         PooledConnection connection = mock( PooledConnection.class );
-        Supplier<PooledConnection> supplier = mock( Supplier.class );
-        when( supplier.get() ).thenReturn( connection );
+        Connector supplier = mock( Connector.class );
+        when( supplier.newConnection() ).thenReturn( connection );
         BlockingPooledConnectionQueue queue = new BlockingPooledConnectionQueue( 1 );
         queue.offer( connection );
 
@@ -66,18 +67,18 @@ public class BlockingPooledConnectionQueueTest
         queue.acquire( supplier );
 
         // Then
-        verify( supplier, never() ).get();
+        verify( supplier, never() ).newConnection();
     }
 
     @SuppressWarnings( "unchecked" )
     @Test
-    public void shouldTerminateAllSeenConnections()
+    public void shouldTerminateAllSeenConnections() throws PackStreamException
     {
         // Given
         PooledConnection connection1 = mock( PooledConnection.class );
         PooledConnection connection2 = mock( PooledConnection.class );
-        Supplier<PooledConnection> supplier = mock( Supplier.class );
-        when( supplier.get() ).thenReturn( connection1 );
+        Connector supplier = mock( Connector.class );
+        when( supplier.newConnection() ).thenReturn( connection1 );
         BlockingPooledConnectionQueue queue = new BlockingPooledConnectionQueue( 2 );
         queue.offer( connection1 );
         queue.offer( connection2 );

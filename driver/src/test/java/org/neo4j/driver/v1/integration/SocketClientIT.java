@@ -28,6 +28,7 @@ import java.security.GeneralSecurityException;
 import java.util.LinkedList;
 import java.util.Queue;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.SocketClient;
 import org.neo4j.driver.internal.net.SocketResponseHandler;
 import org.neo4j.driver.internal.logging.DevNullLogger;
@@ -83,7 +84,7 @@ public class SocketClientIT
         when( handler.protocolViolationErrorOccurred() ).thenReturn( true );
         when( handler.collectorsWaiting() ).thenReturn( 2, 1, 0 );
         when( handler.serverFailure() ).thenReturn(
-                new ClientException( "Neo.ClientError.Request.InvalidFormat", "Hello, world!" ) );
+                new PackStreamException.ServerFailure( "Neo.ClientError.Request.InvalidFormat", "Hello, world!" ) );
 
         // When & Then
         client.start();
@@ -95,7 +96,7 @@ public class SocketClientIT
         }
         catch ( Exception e )
         {
-            assertTrue( e instanceof ClientException );
+            assertTrue( e instanceof PackStreamException.ServerFailure );
             assertThat( e.getMessage(), equalTo( "Hello, world!" ) );
         }
 

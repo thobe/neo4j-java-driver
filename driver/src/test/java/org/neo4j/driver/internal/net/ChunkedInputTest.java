@@ -164,7 +164,7 @@ public class ChunkedInputTest
     }
 
     @Test
-    public void shouldNotReadMessageEndingWhenByteLeftInBuffer()
+    public void shouldNotReadMessageEndingWhenByteLeftInBuffer() throws Exception
     {
         // Given
         ReadableByteChannel channel = Channels.newChannel(
@@ -190,7 +190,7 @@ public class ChunkedInputTest
     }
 
     @Test
-    public void shouldGiveHelpfulMessageOnInterrupt() throws IOException
+    public void shouldGiveHelpfulMessageOnInterrupt() throws Exception
     {
         // Given
         ReadableByteChannel channel = mock(ReadableByteChannel.class);

@@ -30,6 +30,7 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.v1.exceptions.ClientException;
 import org.neo4j.driver.v1.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.v1.util.RecordingByteChannel;
@@ -49,7 +50,7 @@ public class BufferingChunkedInputTest
     public ExpectedException exception = ExpectedException.none();
 
     @Test
-    public void shouldReadOneByteInOneChunk() throws IOException
+    public void shouldReadOneByteInOneChunk() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input = new BufferingChunkedInput( packet( 0, 2, 13, 37, 0, 0 ) );
@@ -64,7 +65,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldReadOneByteInTwoChunks() throws IOException
+    public void shouldReadOneByteInTwoChunks() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input = new BufferingChunkedInput( packet( 0, 1, 13, 0, 1, 37, 0, 0 ) );
@@ -79,7 +80,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldReadOneByteWhenSplitHeader() throws IOException
+    public void shouldReadOneByteWhenSplitHeader() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input =
@@ -95,7 +96,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldReadBytesAcrossHeaders() throws IOException
+    public void shouldReadBytesAcrossHeaders() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input =
@@ -110,7 +111,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldReadChunkWithSplitHeaderForBigMessages() throws IOException
+    public void shouldReadChunkWithSplitHeaderForBigMessages() throws PackStreamException.InputFailure
     {
         // Given
         int packetSize = 384;
@@ -129,7 +130,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldReadChunkWithSplitHeaderForBigMessagesWhenInternalBufferHasOneByte() throws IOException
+    public void shouldReadChunkWithSplitHeaderForBigMessagesWhenInternalBufferHasOneByte() throws PackStreamException.InputFailure
     {
         // Given
         int packetSize = 32780;
@@ -142,7 +143,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldReadUnsignedByteFromBuffer() throws IOException
+    public void shouldReadUnsignedByteFromBuffer() throws PackStreamException.InputFailure
     {
         ByteBuffer buffer = ByteBuffer.allocate( 1 );
         buffer.put( (byte) -1 );
@@ -151,7 +152,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldReadOneByteInOneChunkWhenBustingBuffer() throws IOException
+    public void shouldReadOneByteInOneChunkWhenBustingBuffer() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input = new BufferingChunkedInput( packet( 0, 2, 13, 37, 0, 0 ), 2 );
@@ -310,7 +311,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldNotReadMessageEndingWhenByteLeftInBuffer() throws IOException
+    public void shouldNotReadMessageEndingWhenByteLeftInBuffer() throws PackStreamException.InputFailure
     {
         // Given
         ReadableByteChannel channel = Channels.newChannel(
@@ -336,7 +337,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldGiveHelpfulMessageOnInterrupt() throws IOException
+    public void shouldGiveHelpfulMessageOnInterrupt() throws IOException, PackStreamException.InputFailure
     {
         // Given
         ReadableByteChannel channel = mock( ReadableByteChannel.class );
@@ -357,7 +358,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldPeekOneByteInOneChunk() throws IOException
+    public void shouldPeekOneByteInOneChunk() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input = new BufferingChunkedInput( packet( 0, 2, 13, 37, 0, 0 ) );
@@ -376,7 +377,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldPeekOneByteInTwoChunks() throws IOException
+    public void shouldPeekOneByteInTwoChunks() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input = new BufferingChunkedInput( packet( 0, 1, 13, 0, 1, 37, 0, 0 ) );
@@ -395,7 +396,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldPeekOneByteWhenSplitHeader() throws IOException
+    public void shouldPeekOneByteWhenSplitHeader() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input =
@@ -415,7 +416,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldPeekOneByteInOneChunkWhenBustingBuffer() throws IOException
+    public void shouldPeekOneByteInOneChunkWhenBustingBuffer() throws PackStreamException.InputFailure
     {
         // Given
         BufferingChunkedInput input = new BufferingChunkedInput( packet( 0, 2, 13, 37, 0, 0 ), 2 );
@@ -434,7 +435,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldNotStackOverflowWhenDataIsNotAvailable() throws IOException
+    public void shouldNotStackOverflowWhenDataIsNotAvailable() throws PackStreamException.InputFailure
     {
         // Given a channel that does not get data from the channel
         ReadableByteChannel channel = new ReadableByteChannel()
@@ -443,7 +444,7 @@ public class BufferingChunkedInputTest
             private int numberOfTries = 10000;
 
             @Override
-            public int read( ByteBuffer dst ) throws IOException
+            public int read( ByteBuffer dst )
             {
                 if ( counter++ < numberOfTries )
                 {
@@ -463,9 +464,8 @@ public class BufferingChunkedInputTest
             }
 
             @Override
-            public void close() throws IOException
+            public void close()
             {
-
             }
         };
 
@@ -478,7 +478,7 @@ public class BufferingChunkedInputTest
     }
 
     @Test
-    public void shouldFailNicelyOnClosedConnections() throws IOException
+    public void shouldFailNicelyOnClosedConnections() throws IOException, PackStreamException.InputFailure
     {
         // Given
         ReadableByteChannel channel = mock( ReadableByteChannel.class );
@@ -540,7 +540,6 @@ public class BufferingChunkedInputTest
 
     private ReadableByteChannel packets( final ReadableByteChannel... channels )
     {
-
         return new ReadableByteChannel()
         {
             private int index = 0;
@@ -558,9 +557,8 @@ public class BufferingChunkedInputTest
             }
 
             @Override
-            public void close() throws IOException
+            public void close()
             {
-
             }
         };
     }

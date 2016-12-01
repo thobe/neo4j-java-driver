@@ -20,6 +20,7 @@ package org.neo4j.driver.internal.spi;
 
 import java.util.List;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.v1.Value;
 import org.neo4j.driver.v1.exceptions.ClientException;
 import org.neo4j.driver.v1.exceptions.Neo4jException;
@@ -36,7 +37,7 @@ public interface Collector
     Collector ACK_FAILURE = new NoOperationCollector()
     {
         @Override
-        public void doneFailure( Neo4jException error )
+        public void doneFailure( PackStreamException.ServerFailure error )
         {
             throw new ClientException(
                     "Invalid server response message `FAILURE` received for client message `ACK_FAILURE`.", error );
@@ -69,20 +70,8 @@ public interface Collector
 
     class ResetCollector extends NoOperationCollector
     {
-        private final Runnable doneSuccessCallBack;
-
-        public ResetCollector()
-        {
-            this( null );
-        }
-
-        public ResetCollector( Runnable doneSuccessCallBack )
-        {
-            this.doneSuccessCallBack = doneSuccessCallBack;
-        }
-
         @Override
-        public void doneFailure( Neo4jException error )
+        public void doneFailure( PackStreamException.ServerFailure error )
         {
             throw new ClientException(
                     "Invalid server response message `FAILURE` received for client message `RESET`.", error );
@@ -98,10 +87,6 @@ public interface Collector
         @Override
         public void doneSuccess()
         {
-            if( doneSuccessCallBack != null )
-            {
-                doneSuccessCallBack.run();
-            }
         }
     }
 
@@ -142,7 +127,7 @@ public interface Collector
         }
 
         @Override
-        public void doneFailure( Neo4jException error )
+        public void doneFailure( PackStreamException.ServerFailure error )
         {
             done();
         }
@@ -185,7 +170,7 @@ public interface Collector
 
     void doneSuccess();
 
-    void doneFailure( Neo4jException error );
+    void doneFailure( PackStreamException.ServerFailure error );
 
     void doneIgnored();
 

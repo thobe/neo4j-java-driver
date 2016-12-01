@@ -29,6 +29,7 @@ import org.junit.rules.ExpectedException;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.internal.value.NullValue;
 import org.neo4j.driver.v1.Record;
@@ -61,7 +62,7 @@ public class InternalStatementResultTest
     public ExpectedException expectedException = ExpectedException.none();
 
     @Test
-    public void iterationShouldWorksAsExpected()
+    public void iterationShouldWorksAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 3 );
@@ -86,7 +87,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void firstOfFieldNameShouldWorkAsExpected()
+    public void firstOfFieldNameShouldWorkAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 3 );
@@ -97,7 +98,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void firstOfFieldIndexShouldWorkAsExpected()
+    public void firstOfFieldIndexShouldWorkAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 3 );
@@ -108,7 +109,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singlePastFirstShouldFail()
+    public void singlePastFirstShouldFail() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 2 );
@@ -124,7 +125,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleNoneShouldFail()
+    public void singleNoneShouldFail() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 0 );
@@ -138,7 +139,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleWhenMoreThanOneShouldFail()
+    public void singleWhenMoreThanOneShouldFail() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 2 );
@@ -152,7 +153,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleOfFieldNameShouldWorkAsExpected()
+    public void singleOfFieldNameShouldWorkAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 1 );
@@ -163,7 +164,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleOfFieldIndexShouldWorkAsExpected()
+    public void singleOfFieldIndexShouldWorkAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 1 );
@@ -174,13 +175,13 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleShouldWorkAsExpected()
+    public void singleShouldWorkAsExpected() throws PackStreamException
     {
         assertNotNull( createResult( 1 ).single() );
     }
 
     @Test
-    public void singleShouldThrowOnBigResult()
+    public void singleShouldThrowOnBigResult() throws PackStreamException
     {
         // Expect
         expectedException.expect( NoSuchRecordException.class );
@@ -190,7 +191,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleShouldThrowOnEmptyResult()
+    public void singleShouldThrowOnEmptyResult() throws PackStreamException
     {
         // Expect
         expectedException.expect( NoSuchRecordException.class );
@@ -200,7 +201,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleShouldThrowOnConsumedResult()
+    public void singleShouldThrowOnConsumedResult() throws PackStreamException
     {
         // Expect
         expectedException.expect( NoSuchRecordException.class );
@@ -212,7 +213,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void shouldConsumeTwice()
+    public void shouldConsumeTwice() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 2 );
@@ -226,7 +227,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void shouldList()
+    public void shouldList() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 2 );
@@ -237,7 +238,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void shouldListTwice()
+    public void shouldListTwice() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 2 );
@@ -250,7 +251,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleShouldNotThrowOnPartiallyConsumedResult()
+    public void singleShouldNotThrowOnPartiallyConsumedResult() throws PackStreamException
     {
         // Given
         StatementResult result = createResult( 2 );
@@ -261,7 +262,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void singleShouldConsumeIfFailing()
+    public void singleShouldConsumeIfFailing() throws PackStreamException
     {
         // Given
         StatementResult result = createResult( 2 );
@@ -278,7 +279,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void retainShouldWorkAsExpected()
+    public void retainShouldWorkAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 3 );
@@ -292,7 +293,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void retainAndMapByKeyShouldWorkAsExpected()
+    public void retainAndMapByKeyShouldWorkAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 3 );
@@ -306,7 +307,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void retainAndMapByIndexShouldWorkAsExpected()
+    public void retainAndMapByIndexShouldWorkAsExpected() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 3 );
@@ -320,7 +321,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void accessingOutOfBoundsShouldBeNull()
+    public void accessingOutOfBoundsShouldBeNull() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 1 );
@@ -336,7 +337,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void accessingKeysWithoutCallingNextShouldNotFail()
+    public void accessingKeysWithoutCallingNextShouldNotFail() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 11 );
@@ -349,7 +350,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void shouldPeekIntoTheFuture()
+    public void shouldPeekIntoTheFuture() throws PackStreamException
     {
         // WHEN
         StatementResult result = createResult( 2 );
@@ -374,7 +375,7 @@ public class InternalStatementResultTest
     }
 
     @Test
-    public void shouldNotPeekIntoTheFutureWhenResultIsEmpty()
+    public void shouldNotPeekIntoTheFutureWhenResultIsEmpty() throws PackStreamException
     {
         // GIVEN
         StatementResult result = createResult( 0 );
@@ -386,7 +387,7 @@ public class InternalStatementResultTest
         Record future = result.peek();
     }
 
-    private StatementResult createResult( int numberOfRecords )
+    private StatementResult createResult( int numberOfRecords ) throws PackStreamException
     {
         Connection connection = mock( Connection.class );
         String statement = "<unknown>";

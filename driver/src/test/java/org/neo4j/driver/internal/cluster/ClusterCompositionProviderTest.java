@@ -30,6 +30,7 @@ import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
 
 import org.neo4j.driver.internal.EventHandler;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 import org.neo4j.driver.internal.spi.Collector;
 import org.neo4j.driver.internal.spi.Connection;
@@ -151,17 +152,17 @@ public class ClusterCompositionProviderTest
         return new ClusterComposition.Provider.Default( clock ).getClusterComposition( connection );
     }
 
-    private void keys( final String... keys )
+    private void keys( final String... keys ) throws PackStreamException
     {
         onGetServers( doAnswer( withKeys( keys ) ) );
     }
 
-    private void values( final Value[]... records )
+    private void values( final Value[]... records ) throws PackStreamException
     {
         onPullAll( doAnswer( withServerList( records ) ) );
     }
 
-    private void onGetServers( Stubber stubber )
+    private void onGetServers( Stubber stubber ) throws PackStreamException
     {
         stubber.when( connection ).run(
                 eq( ClusterComposition.Provider.GET_SERVERS ),
@@ -169,7 +170,7 @@ public class ClusterCompositionProviderTest
                 any( Collector.class ) );
     }
 
-    private void onPullAll( Stubber stubber )
+    private void onPullAll( Stubber stubber ) throws PackStreamException
     {
         stubber.when( connection ).pullAll( any( Collector.class ) );
     }

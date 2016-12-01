@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.ChunkedInput;
 import org.neo4j.driver.internal.messaging.ResetMessage;
 import org.neo4j.driver.internal.messaging.AckFailureMessage;
@@ -171,7 +172,7 @@ public class DumpMessage
     }
 
     public static List<Message> unpack( List<Message> outcome, MessageFormat.Reader reader )
-            throws IOException
+            throws PackStreamException
     {
         do
         {
@@ -213,13 +214,13 @@ public class DumpMessage
         }
 
         @Override
-        public boolean hasMoreData() throws IOException
+        public boolean hasMoreData()
         {
             return curPos < size;
         }
 
         @Override
-        public byte readByte()
+        public byte readByte() throws PackStreamException.InputFailure
         {
             prePos = curPos;
             byte read = delegate.readByte();
@@ -228,7 +229,7 @@ public class DumpMessage
         }
 
         @Override
-        public short readShort()
+        public short readShort() throws PackStreamException.InputFailure
         {
             prePos = curPos;
             short read = delegate.readShort();
@@ -237,7 +238,7 @@ public class DumpMessage
         }
 
         @Override
-        public int readInt()
+        public int readInt() throws PackStreamException.InputFailure
         {
             prePos = curPos;
             int read = delegate.readInt();
@@ -246,7 +247,7 @@ public class DumpMessage
         }
 
         @Override
-        public long readLong()
+        public long readLong() throws PackStreamException.InputFailure
         {
             prePos = curPos;
             long read = delegate.readLong();
@@ -255,7 +256,7 @@ public class DumpMessage
         }
 
         @Override
-        public double readDouble()
+        public double readDouble() throws PackStreamException.InputFailure
         {
             prePos = curPos;
             double read = delegate.readDouble();
@@ -264,7 +265,7 @@ public class DumpMessage
         }
 
         @Override
-        public PackInput readBytes( byte[] into, int offset, int toRead )
+        public PackInput readBytes( byte[] into, int offset, int toRead ) throws PackStreamException.InputFailure
         {
             prePos = curPos;
             PackInput packInput = delegate.readBytes( into, offset, toRead );
@@ -273,19 +274,19 @@ public class DumpMessage
         }
 
         @Override
-        public byte peekByte()
+        public byte peekByte() throws PackStreamException.InputFailure
         {
             return delegate.peekByte();
         }
 
-        public Runnable messageBoundaryHook()
+        public MessageFormat.Reader.CompletionHandler messageBoundaryHook()
         {
             // the method will call readChunkSize method so no need to +2
-            final Runnable runnable = delegate.messageBoundaryHook();
-            return new Runnable()
+            final MessageFormat.Reader.CompletionHandler runnable = delegate.messageBoundaryHook();
+            return new MessageFormat.Reader.CompletionHandler()
             {
                 @Override
-                public void run()
+                public void run() throws PackStreamException.InputFailure
                 {
                     prePos = curPos;
                     runnable.run();
@@ -299,7 +300,7 @@ public class DumpMessage
      * All the interpreted messages will be appended to the input message array even if an error happens when
      * decoding other messages latter.
      */
-    private static class MessageRecordedMessageHandler implements MessageHandler
+    private static class MessageRecordedMessageHandler implements MessageHandler<RuntimeException>
     {
         private final List<Message> outcome;
 
@@ -315,7 +316,7 @@ public class DumpMessage
         }
 
         @Override
-        public void handleInitMessage( String clientNameAndVersion, Map<String,Value> authToken ) throws IOException
+        public void handleInitMessage( String clientNameAndVersion, Map<String,Value> authToken )
         {
             outcome.add( new InitMessage( clientNameAndVersion, authToken ) );
         }

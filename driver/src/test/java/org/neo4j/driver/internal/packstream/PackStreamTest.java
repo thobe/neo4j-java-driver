@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.util.BytePrinter;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -652,7 +653,7 @@ public class PackStreamTest
         assertStruct( 2439 );
 
         //we cannot have 'too many' fields
-        exception.expect( PackStream.Overflow.class );
+        exception.expect( PackStreamException.StructureFieldOverflow.class );
         assertStruct( 65536 );
     }
 
@@ -832,14 +833,14 @@ public class PackStreamTest
     }
 
     @Test
-    public void shouldFailForUnknownValue() throws IOException
+    public void shouldFailForUnknownValue() throws PackStreamException.SerializationFailure
     {
         // Given
         Machine machine = new Machine();
         PackStream.Packer packer = machine.packer();
 
         // Expect
-        exception.expect( PackStream.UnPackable.class );
+        exception.expect( PackStreamException.Unpackable.class );
 
         // When
         packer.pack( new MyRandomClass() );
@@ -847,7 +848,7 @@ public class PackStreamTest
 
     private static class MyRandomClass{}
 
-    void assertPeekType( PackType type, Object value ) throws IOException
+    void assertPeekType( PackType type, Object value ) throws PackStreamException
     {
         // Given
         Machine machine = new Machine();

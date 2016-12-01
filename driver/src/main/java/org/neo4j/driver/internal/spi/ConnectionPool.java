@@ -19,6 +19,7 @@
 
 package org.neo4j.driver.internal.spi;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 
 public interface ConnectionPool extends AutoCloseable
@@ -29,7 +30,7 @@ public interface ConnectionPool extends AutoCloseable
      *
      * @param address The address to acquire
      */
-    Connection acquire( BoltServerAddress address );
+    Connection acquire( BoltServerAddress address ) throws PackStreamException;
 
     /**
      * Removes all connections to a given address from the pool.

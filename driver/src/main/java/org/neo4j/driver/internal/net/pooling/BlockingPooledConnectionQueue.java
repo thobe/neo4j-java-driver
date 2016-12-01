@@ -27,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.neo4j.driver.internal.exceptions.ConnectionException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.util.Supplier;
 
 /**
@@ -78,13 +80,12 @@ public class BlockingPooledConnectionQueue
      * @param supplier used to create a new connection if queue is empty
      * @return a PooledConnection instance
      */
-    public PooledConnection acquire( Supplier<PooledConnection> supplier )
+    public PooledConnection acquire( Connector supplier ) throws PackStreamException, ConnectionException
     {
-
         PooledConnection poll = queue.poll();
         if ( poll == null )
         {
-            poll = supplier.get();
+            poll = supplier.newConnection();
         }
         acquiredConnections.add( poll );
 

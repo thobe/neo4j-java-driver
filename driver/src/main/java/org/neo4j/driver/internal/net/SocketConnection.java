@@ -18,14 +18,14 @@
  */
 package org.neo4j.driver.internal.net;
 
-import java.io.IOException;
-import java.net.SocketTimeoutException;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.neo4j.driver.internal.exceptions.ConnectionException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.messaging.InitMessage;
 import org.neo4j.driver.internal.messaging.Message;
 import org.neo4j.driver.internal.messaging.RunMessage;
@@ -35,8 +35,6 @@ import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.v1.Logger;
 import org.neo4j.driver.v1.Logging;
 import org.neo4j.driver.v1.Value;
-import org.neo4j.driver.v1.exceptions.ClientException;
-import org.neo4j.driver.v1.exceptions.Neo4jException;
 
 import static java.lang.String.format;
 import static org.neo4j.driver.internal.messaging.AckFailureMessage.ACK_FAILURE;
@@ -57,6 +55,7 @@ public class SocketConnection implements Connection
     private final Logger logger;
 
     public SocketConnection( BoltServerAddress address, SecurityPlan securityPlan, Logging logging )
+            throws ConnectionException
     {
         this.logger = logging.getLog( format( "conn-%s", UUID.randomUUID().toString() ) );
 
@@ -74,144 +73,97 @@ public class SocketConnection implements Connection
     }
 
     @Override
-    public void init( String clientName, Map<String,Value> authToken )
+    public void init( String clientName, Map<String,Value> authToken ) throws PackStreamException, ConnectionException
     {
         queueMessage( new InitMessage( clientName, authToken ), initCollector );
         sync();
     }
 
     @Override
-    public void run( String statement, Map<String,Value> parameters, Collector collector )
+    public void run( String statement, Map<String,Value> parameters, Collector collector ) throws
+            PackStreamException,
+            ConnectionException
     {
         queueMessage( new RunMessage( statement, parameters ), collector );
     }
 
     @Override
-    public void discardAll( Collector collector )
+    public void discardAll( Collector collector ) throws PackStreamException, ConnectionException
     {
         queueMessage( DISCARD_ALL, collector );
     }
 
     @Override
-    public void pullAll( Collector collector )
+    public void pullAll( Collector collector ) throws PackStreamException, ConnectionException
     {
         queueMessage( PULL_ALL, collector );
     }
 
     @Override
-    public void reset()
+    public void reset() throws PackStreamException, ConnectionException
     {
         queueMessage( RESET, Collector.RESET );
     }
 
     @Override
-    public void ackFailure()
+    public void ackFailure() throws PackStreamException, ConnectionException
     {
         queueMessage( ACK_FAILURE, Collector.ACK_FAILURE );
     }
 
     @Override
-    public void sync()
+    public void sync() throws PackStreamException, ConnectionException
     {
         flush();
         receiveAll();
     }
 
     @Override
-    public synchronized void flush()
+    public synchronized void flush() throws PackStreamException, ConnectionException
     {
         ensureNotInterrupted();
-
-        try
-        {
-            socket.send( pendingMessages );
-        }
-        catch ( IOException e )
-        {
-            String message = e.getMessage();
-            throw new ClientException( "Unable to send messages to server: " + message, e );
-        }
+        socket.send( pendingMessages );
     }
 
-    private void ensureNotInterrupted()
+    private void ensureNotInterrupted() throws PackStreamException, ConnectionException
     {
-        try
+        if ( isInterrupted.get() )
         {
-            if( isInterrupted.get() )
+            // receive each of it and throw error immediately
+            while ( responseHandler.collectorsWaiting() > 0 )
             {
-                // receive each of it and throw error immediately
-                while ( responseHandler.collectorsWaiting() > 0 )
-                {
-                    receiveOne();
-                }
+                receiveOne();
             }
         }
-        catch ( Neo4jException e )
-        {
-            throw new ClientException(
-                    "An error has occurred due to the cancellation of executing a previous statement. " +
-                    "You received this error probably because you did not consume the result immediately after " +
-                    "running the statement which get reset in this session.", e );
-        }
-
     }
 
-    private void receiveAll()
+    private void receiveAll() throws PackStreamException, ConnectionException
     {
-        try
-        {
-            socket.receiveAll( responseHandler );
-            assertNoServerFailure();
-        }
-        catch ( IOException e )
-        {
-            throw mapRecieveError( e );
-        }
+        socket.receiveAll( responseHandler );
+        assertNoServerFailure();
     }
 
     @Override
-    public void receiveOne()
+    public void receiveOne() throws PackStreamException, ConnectionException
     {
-        try
-        {
-            socket.receiveOne( responseHandler );
-            assertNoServerFailure();
-        }
-        catch ( IOException e )
-        {
-            throw mapRecieveError( e );
-        }
+        socket.receiveOne( responseHandler );
+        assertNoServerFailure();
     }
 
-    private void assertNoServerFailure()
+    private void assertNoServerFailure() throws PackStreamException.ServerFailure
     {
         if ( responseHandler.serverFailureOccurred() )
         {
-            Neo4jException exception = responseHandler.serverFailure();
+            PackStreamException.ServerFailure exception = responseHandler.serverFailure();
             responseHandler.clearError();
             isInterrupted.set( false );
             throw exception;
         }
     }
 
-    private ClientException mapRecieveError( IOException e )
-    {
-        String message = e.getMessage();
-        if ( message == null )
-        {
-            return new ClientException( "Unable to read response from server: " + e.getClass().getSimpleName(), e );
-        }
-        else if ( e instanceof SocketTimeoutException )
-        {
-            return new ClientException( "Server did not reply within the network timeout limit.", e );
-        }
-        else
-        {
-            return new ClientException( "Unable to read response from server: " + message, e );
-        }
-    }
-
-    private synchronized void queueMessage( Message msg, Collector collector )
+    private synchronized void queueMessage( Message msg, Collector collector ) throws
+            PackStreamException,
+            ConnectionException
     {
         ensureNotInterrupted();
 
@@ -220,7 +172,7 @@ public class SocketConnection implements Connection
     }
 
     @Override
-    public void close()
+    public void close() throws ConnectionException.ImproperlyClosed
     {
         socket.stop();
     }
@@ -244,17 +196,17 @@ public class SocketConnection implements Connection
     }
 
     @Override
-    public synchronized void resetAsync()
+    public synchronized void resetAsync() throws PackStreamException, ConnectionException
     {
-        queueMessage( RESET, new Collector.ResetCollector( new Runnable()
+        queueMessage( RESET, new Collector.ResetCollector()
         {
             @Override
-            public void run()
+            public void doneSuccess()
             {
                 isInterrupted.set( false );
                 isAckFailureMuted.set( false );
             }
-        } ) );
+        } );
         flush();
         isInterrupted.set( true );
         isAckFailureMuted.set( true );

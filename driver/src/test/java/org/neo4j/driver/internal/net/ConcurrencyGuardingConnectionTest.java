@@ -18,18 +18,19 @@
  */
 package org.neo4j.driver.internal.net;
 
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.spi.Connection;
-import org.neo4j.driver.v1.util.Function;
 import org.neo4j.driver.v1.exceptions.ClientException;
+import org.neo4j.driver.v1.util.Function;
 
 import static java.util.Arrays.asList;
 import static junit.framework.TestCase.fail;
@@ -40,8 +41,13 @@ import static org.mockito.Mockito.mock;
 @RunWith( Parameterized.class )
 public class ConcurrencyGuardingConnectionTest
 {
+    public interface Operation
+    {
+        void perform( Connection connection ) throws PackStreamException;
+    }
+    
     @Parameterized.Parameter
-    public Function<Connection, Void> operation;
+    public Operation operation;
 
     @Parameterized.Parameters
     public static List<Object[]> params()
@@ -71,7 +77,7 @@ public class ConcurrencyGuardingConnectionTest
             {
                 try
                 {
-                    operation.apply( conn.get() );
+                    operation.perform( conn.get() );
                     fail("Expected this call to fail, because it is calling a method on the connector while 'inside' " +
                          "a connector call already.");
                 } catch(ClientException e)
@@ -85,7 +91,7 @@ public class ConcurrencyGuardingConnectionTest
         conn.set(new ConcurrencyGuardingConnection( delegate ));
 
         // When
-        operation.apply( conn.get() );
+        operation.perform( conn.get() );
 
         // Then
         assertThat( exception.get().getMessage(), equalTo(
@@ -95,83 +101,75 @@ public class ConcurrencyGuardingConnectionTest
                 "do that is to give each thread its own dedicated session.") );
     }
 
-    public static final Function<Connection,Void> INIT = new Function<Connection,Void>()
+    public static final Operation INIT = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.init(null, null);
-            return null;
         }
     };
 
-    public static final Function<Connection,Void> RUN = new Function<Connection,Void>()
+    public static final Operation RUN = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.run(null, null, null);
-            return null;
         }
     };
 
-    public static final Function<Connection,Void> DISCARD_ALL = new Function<Connection,Void>()
+    public static final Operation DISCARD_ALL = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.discardAll(null);
-            return null;
         }
     };
 
-    public static final Function<Connection,Void> PULL_ALL = new Function<Connection,Void>()
+    public static final Operation PULL_ALL = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.pullAll(null);
-            return null;
         }
     };
 
-    public static final Function<Connection,Void> RECIEVE_ONE = new Function<Connection,Void>()
+    public static final Operation RECIEVE_ONE = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.receiveOne();
-            return null;
         }
     };
 
-    public static final Function<Connection,Void> CLOSE = new Function<Connection,Void>()
+    public static final Operation CLOSE = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.close();
-            return null;
         }
     };
 
-    public static final Function<Connection,Void> SYNC = new Function<Connection,Void>()
+    public static final Operation SYNC = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.sync();
-            return null;
         }
     };
 
-    public static final Function<Connection,Void> FLUSH = new Function<Connection,Void>()
+    public static final Operation FLUSH = new Operation()
     {
         @Override
-        public Void apply( Connection connection )
+        public void perform( Connection connection ) throws PackStreamException
         {
             connection.flush();
-            return null;
         }
     };
 }

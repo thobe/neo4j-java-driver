@@ -18,8 +18,6 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
-
 /**
  * ACK_FAILURE request message
  *
@@ -31,7 +29,7 @@ public class AckFailureMessage implements Message
     public static final AckFailureMessage ACK_FAILURE= new AckFailureMessage();
 
     @Override
-    public void dispatch( MessageHandler handler ) throws IOException
+    public <Failure extends Exception> void dispatch( MessageHandler<Failure> handler ) throws Failure
     {
         handler.handleAckFailureMessage();
     }

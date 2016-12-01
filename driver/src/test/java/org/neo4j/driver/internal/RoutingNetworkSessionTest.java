@@ -23,6 +23,7 @@ import org.junit.Test;
 
 import java.util.Map;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 import org.neo4j.driver.internal.spi.Collector;
 import org.neo4j.driver.internal.spi.Connection;
@@ -61,7 +62,7 @@ public class RoutingNetworkSessionTest
 
     @SuppressWarnings( "unchecked" )
     @Test
-    public void shouldHandleConnectionFailures()
+    public void shouldHandleConnectionFailures() throws PackStreamException
     {
         // Given
         doThrow( new ServiceUnavailableException( "oh no" ) ).
@@ -89,7 +90,7 @@ public class RoutingNetworkSessionTest
 
     @SuppressWarnings( "unchecked" )
     @Test
-    public void shouldHandleWriteFailuresInWriteAccessMode()
+    public void shouldHandleWriteFailuresInWriteAccessMode() throws PackStreamException
     {
         // Given
         doThrow( new ClientException( "Neo.ClientError.Cluster.NotALeader", "oh no!" ) ).
@@ -116,7 +117,7 @@ public class RoutingNetworkSessionTest
 
     @SuppressWarnings( "unchecked" )
     @Test
-    public void shouldHandleWriteFailuresInReadAccessMode()
+    public void shouldHandleWriteFailuresInReadAccessMode() throws PackStreamException
     {
         // Given
         doThrow( new ClientException( "Neo.ClientError.Cluster.NotALeader", "oh no!" ) ).
@@ -139,7 +140,7 @@ public class RoutingNetworkSessionTest
 
     @SuppressWarnings( "unchecked" )
     @Test
-    public void shouldRethrowNonWriteFailures()
+    public void shouldRethrowNonWriteFailures() throws PackStreamException
     {
         // Given
         ClientException toBeThrown = new ClientException( "code", "oh no!" );
@@ -164,7 +165,7 @@ public class RoutingNetworkSessionTest
     }
 
     @Test
-    public void shouldHandleConnectionFailuresOnClose()
+    public void shouldHandleConnectionFailuresOnClose() throws PackStreamException
     {
         // Given
         doThrow( new ServiceUnavailableException( "oh no" ) ).
@@ -191,7 +192,7 @@ public class RoutingNetworkSessionTest
     }
 
     @Test
-    public void shouldHandleWriteFailuresOnClose()
+    public void shouldHandleWriteFailuresOnClose() throws PackStreamException
     {
         // Given
         doThrow( new ClientException( "Neo.ClientError.Cluster.NotALeader", "oh no!" ) ).when( connection ).sync();

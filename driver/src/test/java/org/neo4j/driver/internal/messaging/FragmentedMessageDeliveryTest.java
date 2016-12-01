@@ -29,6 +29,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.ChunkedOutput;
 import org.neo4j.driver.v1.Value;
 import org.neo4j.driver.v1.util.DumpMessage;
@@ -79,7 +80,7 @@ public class FragmentedMessageDeliveryTest
         }
     }
 
-    private void testPermutation( byte[] unfragmented, int... sizes ) throws IOException
+    private void testPermutation( byte[] unfragmented, int... sizes ) throws PackStreamException
     {
         int pos = 0;
         ByteBuffer[] fragments = new ByteBuffer[sizes.length];
@@ -91,7 +92,7 @@ public class FragmentedMessageDeliveryTest
         testPermutation( unfragmented, fragments );
     }
 
-    private void testPermutation( byte[] unfragmented, ByteBuffer[] fragments ) throws IOException
+    private void testPermutation( byte[] unfragmented, ByteBuffer[] fragments ) throws PackStreamException
     {
 
         // When data arrives split up according to the current permutation
@@ -145,7 +146,7 @@ public class FragmentedMessageDeliveryTest
         };
     }
 
-    private byte[] serialize( Message... msgs ) throws IOException
+    private byte[] serialize( Message... msgs ) throws PackStreamException
     {
 
             final ByteArrayOutputStream out = new ByteArrayOutputStream( 128 );

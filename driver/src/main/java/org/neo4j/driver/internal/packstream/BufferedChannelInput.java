@@ -18,10 +18,11 @@
  */
 package org.neo4j.driver.internal.packstream;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.ReadableByteChannel;
+
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 
 /**
  * An {@link PackInput} implementation that reads from an input channel into an internal buffer.
@@ -52,48 +53,48 @@ public class BufferedChannelInput implements PackInput
     }
 
     @Override
-    public boolean hasMoreData() throws IOException
+    public boolean hasMoreData() throws PackStreamException.InputFailure
     {
         return attempt( 1 );
     }
 
     @Override
-    public byte readByte() throws IOException
+    public byte readByte() throws PackStreamException.InputFailure
     {
         ensure( 1 );
         return buffer.get();
     }
 
     @Override
-    public short readShort() throws IOException
+    public short readShort() throws PackStreamException.InputFailure
     {
         ensure( 2 );
         return buffer.getShort();
     }
 
     @Override
-    public int readInt() throws IOException
+    public int readInt() throws PackStreamException.InputFailure
     {
         ensure( 4 );
         return buffer.getInt();
     }
 
     @Override
-    public long readLong() throws IOException
+    public long readLong() throws PackStreamException.InputFailure
     {
         ensure( 8 );
         return buffer.getLong();
     }
 
     @Override
-    public double readDouble() throws IOException
+    public double readDouble() throws PackStreamException.InputFailure
     {
         ensure( 8 );
         return buffer.getDouble();
     }
 
     @Override
-    public PackInput readBytes( byte[] into, int index, int toRead ) throws IOException
+    public PackInput readBytes( byte[] into, int index, int toRead ) throws PackStreamException.InputFailure
     {
         int endIndex = index + toRead;
         while ( index < endIndex)
@@ -106,8 +107,7 @@ public class BufferedChannelInput implements PackInput
                 attempt( endIndex - index );
                 if ( buffer.remaining() == 0 )
                 {
-                    throw new PackStream.EndOfStream( "Expected " + (endIndex - index) + " bytes available, " +
-                                                      "but no more bytes accessible from underlying stream." );
+                    throw new PackStreamException.EndOfStream( endIndex - index );
                 }
             }
         }
@@ -115,13 +115,13 @@ public class BufferedChannelInput implements PackInput
     }
 
     @Override
-    public byte peekByte() throws IOException
+    public byte peekByte() throws PackStreamException.InputFailure
     {
         ensure( 1 );
         return buffer.get( buffer.position() );
     }
 
-    private boolean attempt( int numBytes ) throws IOException
+    private boolean attempt( int numBytes ) throws PackStreamException.InputFailure
     {
         if ( buffer.remaining() >= numBytes )
         {
@@ -139,21 +139,28 @@ public class BufferedChannelInput implements PackInput
         }
 
         int count;
-        do
+        try
         {
-            count = channel.read( buffer );
+            do
+            {
+                count = channel.read( buffer );
+            }
+            while ( count >= 0 && (buffer.position() < numBytes && buffer.remaining() != 0) );
         }
-        while ( count >= 0 && (buffer.position() < numBytes && buffer.remaining() != 0) );
+        catch ( Exception e )
+        {
+            throw new PackStreamException.InputFailure( e );
+        }
 
         buffer.flip();
         return buffer.remaining() >= numBytes;
     }
 
-    private void ensure( int numBytes ) throws IOException
+    private void ensure( int numBytes ) throws PackStreamException.InputFailure
     {
         if ( !attempt( numBytes ) )
         {
-            throw new PackStream.EndOfStream( "Unexpected end of stream while trying to read " + numBytes + " bytes." );
+            throw new PackStreamException.EndOfStream( numBytes );
         }
     }
 }

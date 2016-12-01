@@ -18,14 +18,13 @@
  */
 package org.neo4j.driver.internal.packstream;
 
-import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
 
-import static java.lang.Integer.toHexString;
-import static java.lang.String.format;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
+
 import static java.util.Collections.singletonList;
 
 /**
@@ -168,27 +167,27 @@ public class PackStream
             ((BufferedChannelOutput) out).reset( channel );
         }
 
-        public void flush() throws IOException
+        public void flush() throws PackStreamException.OutputFailure
         {
             out.flush();
         }
 
-        public void packRaw( byte[] data ) throws IOException
+        public void packRaw( byte[] data ) throws PackStreamException.OutputFailure
         {
             out.writeBytes( data, 0, data.length );
         }
 
-        public void packNull() throws IOException
+        public void packNull() throws PackStreamException.OutputFailure
         {
             out.writeByte( NULL );
         }
 
-        public void pack( boolean value ) throws IOException
+        public void pack( boolean value ) throws PackStreamException.OutputFailure
         {
             out.writeByte( value ? TRUE : FALSE );
         }
 
-        public void pack( long value ) throws IOException
+        public void pack( long value ) throws PackStreamException.OutputFailure
         {
             if ( value >= MINUS_2_TO_THE_4 && value < PLUS_2_TO_THE_7)
             {
@@ -216,13 +215,13 @@ public class PackStream
             }
         }
 
-        public void pack( double value ) throws IOException
+        public void pack( double value ) throws PackStreamException.OutputFailure
         {
             out.writeByte( FLOAT_64 )
                     .writeDouble( value );
         }
 
-        public void pack( byte[] values ) throws IOException
+        public void pack( byte[] values ) throws PackStreamException.OutputFailure
         {
             if ( values == null ) { packNull(); }
             else
@@ -232,7 +231,7 @@ public class PackStream
             }
         }
 
-        public void pack( String value ) throws IOException
+        public void pack( String value ) throws PackStreamException.OutputFailure
         {
             if ( value == null ) { packNull(); }
             else
@@ -243,7 +242,7 @@ public class PackStream
             }
         }
 
-        public void packString( byte[] utf8 ) throws IOException
+        public void packString( byte[] utf8 ) throws PackStreamException.OutputFailure
         {
             if ( utf8 == null ) { packNull(); }
             else
@@ -253,7 +252,7 @@ public class PackStream
             }
         }
 
-        public void pack( List values ) throws IOException
+        public void pack( List values ) throws PackStreamException.SerializationFailure
         {
             if ( values == null ) { packNull(); }
             else
@@ -266,7 +265,7 @@ public class PackStream
             }
         }
 
-        public void pack( Map values ) throws IOException
+        public void pack( Map values ) throws PackStreamException.SerializationFailure
         {
             if ( values == null ) { packNull(); }
             else
@@ -280,7 +279,7 @@ public class PackStream
             }
         }
 
-        public void pack( Object value ) throws IOException
+        public void pack( Object value ) throws PackStreamException.SerializationFailure
         {
             if ( value == null ) { packNull(); }
             else if ( value instanceof Boolean ) { pack( (boolean) value ); }
@@ -303,10 +302,10 @@ public class PackStream
             else if ( value instanceof String[] ) { pack( singletonList( value ) ); }
             else if ( value instanceof List ) { pack( (List) value ); }
             else if ( value instanceof Map ) { pack( (Map) value ); }
-            else { throw new UnPackable( format( "Cannot pack object %s", value ) );}
+            else { throw new PackStreamException.Unpackable( value );}
         }
 
-        public void packBytesHeader( int size ) throws IOException
+        public void packBytesHeader( int size ) throws PackStreamException.OutputFailure
         {
             if ( size <= Byte.MAX_VALUE )
             {
@@ -325,7 +324,7 @@ public class PackStream
             }
         }
 
-        public void packStringHeader( int size ) throws IOException
+        public void packStringHeader( int size ) throws PackStreamException.OutputFailure
         {
             if ( size < 0x10 )
             {
@@ -348,7 +347,7 @@ public class PackStream
             }
         }
 
-        public void packListHeader( int size ) throws IOException
+        public void packListHeader( int size ) throws PackStreamException.OutputFailure
         {
             if ( size < 0x10 )
             {
@@ -371,7 +370,7 @@ public class PackStream
             }
         }
 
-        public void packMapHeader( int size ) throws IOException
+        public void packMapHeader( int size ) throws PackStreamException.OutputFailure
         {
             if ( size < 0x10 )
             {
@@ -394,7 +393,7 @@ public class PackStream
             }
         }
 
-        public void packStructHeader( int size, byte signature ) throws IOException
+        public void packStructHeader( int size, byte signature ) throws PackStreamException.SerializationFailure
         {
             if ( size < 0x10 )
             {
@@ -415,8 +414,7 @@ public class PackStream
             }
             else
             {
-                throw new Overflow(
-                        "Structures cannot have more than " + (PLUS_2_TO_THE_16 - 1) + " fields" );
+                throw new PackStreamException.StructureFieldOverflow( size );
             }
         }
 
@@ -431,12 +429,12 @@ public class PackStream
             this.in = in;
         }
 
-        public boolean hasNext() throws IOException
+        public boolean hasNext() throws PackStreamException.InputFailure
         {
             return in.hasMoreData();
         }
 
-        public long unpackStructHeader() throws IOException
+        public long unpackStructHeader() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
             final byte markerHighNibble = (byte) (markerByte & 0xF0);
@@ -447,16 +445,16 @@ public class PackStream
             {
                 case STRUCT_8: return unpackUINT8();
                 case STRUCT_16: return unpackUINT16();
-                default: throw new Unexpected( "Expected a struct, but got: " + toHexString( markerByte ));
+                default: throw new PackStreamException.UnexpectedType( markerByte, "struct", STRUCT_8, STRUCT_16 );
             }
         }
 
-        public byte unpackStructSignature() throws IOException
+        public byte unpackStructSignature() throws PackStreamException.InputFailure
         {
             return in.readByte();
         }
 
-        public long unpackListHeader() throws IOException
+        public long unpackListHeader() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
             final byte markerHighNibble = (byte) (markerByte & 0xF0);
@@ -468,11 +466,11 @@ public class PackStream
                 case LIST_8: return unpackUINT8();
                 case LIST_16: return unpackUINT16();
                 case LIST_32: return unpackUINT32();
-                default: throw new Unexpected( "Expected a list, but got: " + toHexString( markerByte & 0xFF ));
+                default: throw new PackStreamException.UnexpectedType( markerByte, "list", LIST_8, LIST_16, LIST_32 );
             }
         }
 
-        public long unpackMapHeader() throws IOException
+        public long unpackMapHeader() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
             final byte markerHighNibble = (byte) (markerByte & 0xF0);
@@ -484,11 +482,11 @@ public class PackStream
                 case MAP_8: return unpackUINT8();
                 case MAP_16: return unpackUINT16();
                 case MAP_32: return unpackUINT32();
-                default: throw new Unexpected( "Expected a map, but got: " + toHexString( markerByte ));
+                default: throw new PackStreamException.UnexpectedType( markerByte, "map", MAP_8, MAP_16, MAP_32 );
             }
         }
 
-        public long unpackLong() throws IOException
+        public long unpackLong() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
             if ( markerByte >= MINUS_2_TO_THE_4) { return markerByte; }
@@ -498,21 +496,21 @@ public class PackStream
                 case INT_16:  return in.readShort();
                 case INT_32:  return in.readInt();
                 case INT_64:  return in.readLong();
-                default: throw new Unexpected( "Expected an integer, but got: " + toHexString( markerByte ));
+                default: throw new PackStreamException.UnexpectedType( markerByte, "integer", INT_8, INT_16, INT_32, INT_64 );
             }
         }
 
-        public double unpackDouble() throws IOException
+        public double unpackDouble() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
-            if(markerByte == FLOAT_64)
+            if ( markerByte == FLOAT_64 )
             {
                 return in.readDouble();
             }
-            throw new Unexpected( "Expected a double, but got: " + toHexString( markerByte ));
+            throw new PackStreamException.UnexpectedType( markerByte, "double", FLOAT_64 );
         }
 
-        public String unpackString() throws IOException
+        public String unpackString() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
             if( markerByte == TINY_STRING ) // Note no mask, so we compare to 0x80.
@@ -523,7 +521,7 @@ public class PackStream
             return new String(unpackUtf8(markerByte), UTF_8);
         }
 
-        public byte[] unpackBytes() throws IOException
+        public byte[] unpackBytes() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
 
@@ -540,10 +538,10 @@ public class PackStream
                     }
                     else
                     {
-                        throw new Overflow( "BYTES_32 too long for Java" );
+                        throw new PackStreamException.CannotRepresent( "binary data (BYTES_32)", size );
                     }
                 }
-                default: throw new Unexpected( "Expected binary data, but got: 0x" + toHexString( markerByte & 0xFF ));
+                default: throw new PackStreamException.UnexpectedType( markerByte, "binary data", BYTES_8, BYTES_16, BYTES_32 );
             }
         }
 
@@ -552,19 +550,19 @@ public class PackStream
          * a null value. The idiomatic usage would be someone using {@link #peekNextType()} to detect a null type,
          * and then this method to "skip past it".
          * @return null
-         * @throws IOException if the unpacked value was not null
+         * @throws PackStreamException.UnexpectedType if the unpacked value was not null
          */
-        public Object unpackNull() throws IOException
+        public Object unpackNull() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
             if ( markerByte != NULL )
             {
-                throw new Unexpected( "Expected a null, but got: 0x" + toHexString( markerByte & 0xFF ) );
+                throw new PackStreamException.UnexpectedType( markerByte, "null", NULL );
             }
             return null;
         }
 
-        private byte[] unpackUtf8(byte markerByte) throws IOException
+        private byte[] unpackUtf8(byte markerByte) throws PackStreamException.DeserializationFailure
         {
             final byte markerHighNibble = (byte) (markerByte & 0xF0);
             final byte markerLowNibble = (byte) (markerByte & 0x0F);
@@ -583,14 +581,14 @@ public class PackStream
                     }
                     else
                     {
-                        throw new Overflow( "STRING_32 too long for Java" );
+                        throw new PackStreamException.CannotRepresent( "string (STRING_32)", size );
                     }
                 }
-                default: throw new Unexpected( "Expected a string, but got: 0x" + toHexString( markerByte & 0xFF ));
+                default: throw new PackStreamException.UnexpectedType( markerByte, "string", TINY_STRING, STRING_8, STRUCT_16, STRING_32 );
             }
         }
 
-        public boolean unpackBoolean() throws IOException
+        public boolean unpackBoolean() throws PackStreamException.DeserializationFailure
         {
             final byte markerByte = in.readByte();
             switch ( markerByte )
@@ -600,33 +598,33 @@ public class PackStream
                 case FALSE:
                     return false;
                 default:
-                    throw new Unexpected( "Expected a boolean, but got: 0x" + toHexString( markerByte & 0xFF ) );
+                    throw new PackStreamException.UnexpectedType( markerByte,  "boolean", TRUE, FALSE );
             }
         }
 
-        private int unpackUINT8() throws IOException
+        private int unpackUINT8() throws PackStreamException.InputFailure
         {
             return in.readByte() & 0xFF;
         }
 
-        private int unpackUINT16() throws IOException
+        private int unpackUINT16() throws PackStreamException.InputFailure
         {
             return in.readShort() & 0xFFFF;
         }
 
-        private long unpackUINT32() throws IOException
+        private long unpackUINT32() throws PackStreamException.InputFailure
         {
             return in.readInt() & 0xFFFFFFFFL;
         }
 
-        private byte[] unpackBytes( int size ) throws IOException
+        private byte[] unpackBytes( int size ) throws PackStreamException.InputFailure
         {
             byte[] heapBuffer = new byte[size];
             in.readBytes( heapBuffer, 0, heapBuffer.length );
             return heapBuffer;
         }
 
-        public PackType peekNextType() throws IOException
+        public PackType peekNextType() throws PackStreamException.InputFailure
         {
             final byte markerByte = in.peekByte();
             final byte markerHighNibble = (byte) (markerByte & 0xF0);
@@ -672,55 +670,4 @@ public class PackStream
             }
         }
     }
-
-    public static class PackstreamException extends IOException
-    {
-        private static final long serialVersionUID = -1491422133282345421L;
-
-        protected PackstreamException( String message )
-        {
-            super( message );
-        }
-    }
-
-    public static class EndOfStream extends PackstreamException
-    {
-        private static final long serialVersionUID = 5102836237108105603L;
-
-        public EndOfStream( String message )
-        {
-            super( message );
-        }
-    }
-
-    public static class Overflow extends PackstreamException
-    {
-        private static final long serialVersionUID = -923071934446993659L;
-
-        public Overflow( String message )
-        {
-            super( message );
-        }
-    }
-
-    public static class Unexpected extends PackstreamException
-    {
-        private static final long serialVersionUID = 5004685868740125469L;
-
-        public Unexpected( String message )
-        {
-            super( message );
-        }
-    }
-
-    public static class UnPackable extends PackstreamException
-    {
-        private static final long serialVersionUID = 2408740707769711365L;
-
-        public UnPackable( String message )
-        {
-            super( message );
-        }
-    }
-
 }

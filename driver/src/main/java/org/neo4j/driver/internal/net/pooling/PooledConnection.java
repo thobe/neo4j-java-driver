@@ -20,6 +20,9 @@ package org.neo4j.driver.internal.net.pooling;
 
 import java.util.Map;
 
+import org.neo4j.driver.internal.exceptions.ConnectionException;
+import org.neo4j.driver.internal.exceptions.InternalException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 import org.neo4j.driver.internal.spi.Collector;
 import org.neo4j.driver.internal.spi.Connection;
@@ -27,7 +30,6 @@ import org.neo4j.driver.internal.util.Clock;
 import org.neo4j.driver.internal.util.Consumer;
 import org.neo4j.driver.v1.Logger;
 import org.neo4j.driver.v1.Value;
-import org.neo4j.driver.v1.exceptions.Neo4jException;
 /**
  * The state of a pooledConnection from a pool point of view could be one of the following:
  * Created,
@@ -73,128 +75,165 @@ public class PooledConnection implements Connection
     }
 
     @Override
-    public void init( String clientName, Map<String,Value> authToken )
+    public void init( String clientName, Map<String,Value> authToken ) throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.init( clientName, authToken );
         }
-        catch( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void run( String statement, Map<String,Value> parameters,
-            Collector collector )
+    public void run( String statement, Map<String,Value> parameters, Collector collector ) throws
+            PackStreamException,
+            ConnectionException
     {
         try
         {
             delegate.run( statement, parameters, collector );
         }
-        catch(RuntimeException e)
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void discardAll( Collector collector )
+    public void discardAll( Collector collector ) throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.discardAll( collector );
         }
-        catch ( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void pullAll( Collector collector )
+    public void pullAll( Collector collector ) throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.pullAll( collector );
         }
-        catch ( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void reset()
+    public void reset() throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.reset();
         }
-        catch ( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void ackFailure()
+    public void ackFailure() throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.ackFailure();
         }
-        catch ( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void sync()
+    public void sync() throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.sync();
         }
-        catch ( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void flush()
+    public void flush() throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.flush();
         }
-        catch ( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
     @Override
-    public void receiveOne()
+    public void receiveOne() throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.receiveOne();
         }
-        catch ( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
-    @Override
     /**
      * Make sure only close the connection once on each session to avoid releasing the connection twice, a.k.a.
      * adding back the connection twice into the pool.
      */
+    @Override
     public void close()
     {
         release.accept( this );
@@ -214,15 +253,19 @@ public class PooledConnection implements Connection
     }
 
     @Override
-    public void resetAsync()
+    public void resetAsync() throws PackStreamException, ConnectionException
     {
         try
         {
             delegate.resetAsync();
         }
-        catch( RuntimeException e )
+        catch ( PackStreamException e )
         {
-            onDelegateException( e );
+            throw onDelegateException( e );
+        }
+        catch ( ConnectionException e )
+        {
+            throw onDelegateException( e );
         }
     }
 
@@ -250,9 +293,19 @@ public class PooledConnection implements Connection
         return delegate.logger();
     }
 
-    public void dispose()
+    public void dispose() throws ConnectionException.ImproperlyClosed
     {
         delegate.close();
+    }
+
+    private ConnectionException onDelegateException( ConnectionException e )
+    {
+        return handleDelegateException( e );
+    }
+
+    private PackStreamException onDelegateException( PackStreamException e )
+    {
+        return handleDelegateException( e );
     }
 
     /**
@@ -261,41 +314,34 @@ public class PooledConnection implements Connection
      * safely recover from.
      * @param e the exception the delegate threw
      */
-    private void onDelegateException( RuntimeException e )
+    private <EX extends InternalException> EX handleDelegateException( EX e )
     {
-        if ( !isClientOrTransientError( e ) || isProtocolViolationError( e ) )
+        if ( e instanceof PackStreamException.ServerFailure && ((PackStreamException.ServerFailure) e).isUnrecoverable())
         {
             unrecoverableErrorsOccurred = true;
         }
         else if( !isAckFailureMuted() )
         {
-            ackFailure();
+            try
+            {
+                ackFailure();
+            }
+            catch ( PackStreamException | ConnectionException x )
+            {
+                e.addSuppressed( x );
+            }
         }
         if( onError != null )
         {
             onError.run();
         }
-        throw e;
+        return e;
     }
 
     @Override
     public void onError( Runnable runnable )
     {
         this.onError = runnable;
-    }
-
-    private boolean isProtocolViolationError(RuntimeException e )
-    {
-        return e instanceof Neo4jException
-               && ((Neo4jException) e).code().startsWith( "Neo.ClientError.Request" );
-    }
-
-    private boolean isClientOrTransientError( RuntimeException e )
-    {
-        // Eg: DatabaseErrors and unknown (no status code or not neo4j exception) cause session to be discarded
-        return e instanceof Neo4jException
-               && (((Neo4jException) e).code().contains( "ClientError" )
-                   || ((Neo4jException) e).code().contains( "TransientError" ));
     }
 
     public long idleTime()

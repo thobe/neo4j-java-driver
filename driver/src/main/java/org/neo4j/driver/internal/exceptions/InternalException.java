@@ -16,38 +16,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.neo4j.driver.internal.messaging;
+package org.neo4j.driver.internal.exceptions;
 
 /**
- * PULL_ALL request message
+ * This is the base of all exceptions thrown in the internals of the implementation.
  * <p>
- * Sent by clients to pull the entirety of the remaining stream down.
+ * The user-facing exceptions in {@link org.neo4j.driver.v1.exceptions} should only be thrown from the very surface
+ * level of the implementation, and at that point the {@link #publicException()} method should be used
  */
-public class PullAllMessage implements Message
+public abstract class InternalException extends Exception
 {
-    public static final PullAllMessage PULL_ALL = new PullAllMessage();
-
-    @Override
-    public <Failure extends Exception> void dispatch( MessageHandler<Failure> handler ) throws Failure
+    InternalException()
     {
-        handler.handlePullAllMessage();
     }
 
-    @Override
-    public String toString()
+    InternalException( Throwable cause )
     {
-        return "PULL_ALL";
+        super( cause );
     }
 
-    @Override
-    public boolean equals( Object obj )
-    {
-        return obj != null && obj.getClass() == getClass();
-    }
+    public abstract RuntimeException publicException();
 
     @Override
-    public int hashCode()
-    {
-        return 1;
-    }
+    public abstract String getMessage();
 }

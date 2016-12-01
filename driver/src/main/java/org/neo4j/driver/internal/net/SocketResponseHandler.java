@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.messaging.MessageHandler;
 import org.neo4j.driver.internal.spi.Collector;
 import org.neo4j.driver.internal.summary.InternalNotification;
@@ -29,20 +30,16 @@ import org.neo4j.driver.internal.summary.InternalPlan;
 import org.neo4j.driver.internal.summary.InternalProfiledPlan;
 import org.neo4j.driver.internal.summary.InternalSummaryCounters;
 import org.neo4j.driver.v1.Value;
-import org.neo4j.driver.v1.exceptions.ClientException;
-import org.neo4j.driver.v1.exceptions.DatabaseException;
-import org.neo4j.driver.v1.exceptions.Neo4jException;
-import org.neo4j.driver.v1.exceptions.TransientException;
 import org.neo4j.driver.v1.summary.Notification;
 import org.neo4j.driver.v1.summary.StatementType;
 import org.neo4j.driver.v1.util.Function;
 
-public class SocketResponseHandler implements MessageHandler
+public class SocketResponseHandler implements MessageHandler<RuntimeException>
 {
     private final Queue<Collector> collectors = new ConcurrentLinkedQueue<>();
 
     /** If a failure occurs, the error gets stored here */
-    private Neo4jException error;
+    private PackStreamException.ServerFailure error;
 
     public int collectorsWaiting()
     {
@@ -60,20 +57,7 @@ public class SocketResponseHandler implements MessageHandler
     public void handleFailureMessage( String code, String message )
     {
         Collector collector = collectors.remove();
-        String[] parts = code.split( "\\." );
-        String classification = parts[1];
-        switch ( classification )
-        {
-            case "ClientError":
-                error = new ClientException( code, message );
-                break;
-            case "TransientError":
-                error = new TransientException( code, message );
-                break;
-            default:
-                error = new DatabaseException( code, message );
-                break;
-        }
+        error = new PackStreamException.ServerFailure(code, message);
         if ( collector != null )
         {
             collector.doneFailure( error );
@@ -263,7 +247,7 @@ public class SocketResponseHandler implements MessageHandler
 
     public boolean protocolViolationErrorOccurred()
     {
-        return error != null && error.code().startsWith( "Neo.ClientError.Request" );
+        return error != null && error.isProtocolViolation();
     }
 
     public boolean serverFailureOccurred()
@@ -271,7 +255,7 @@ public class SocketResponseHandler implements MessageHandler
         return error != null;
     }
 
-    public Neo4jException serverFailure()
+    public PackStreamException.ServerFailure serverFailure()
     {
         return error;
     }

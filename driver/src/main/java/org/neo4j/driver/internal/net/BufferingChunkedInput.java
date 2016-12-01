@@ -21,13 +21,12 @@ package org.neo4j.driver.internal.net;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.ReadableByteChannel;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
+import org.neo4j.driver.internal.messaging.MessageFormat;
 import org.neo4j.driver.internal.packstream.PackInput;
 import org.neo4j.driver.internal.util.BytePrinter;
-import org.neo4j.driver.v1.exceptions.ClientException;
-import org.neo4j.driver.v1.exceptions.ServiceUnavailableException;
 
 import static java.lang.Math.min;
 
@@ -99,48 +98,48 @@ public class BufferingChunkedInput implements PackInput
 
 
     @Override
-    public boolean hasMoreData() throws IOException
+    public boolean hasMoreData()
     {
         return hasMoreDataUnreadInCurrentChunk();
     }
 
     @Override
-    public byte readByte() throws IOException
+    public byte readByte() throws PackStreamException.InputFailure
     {
         fillScratchBuffer( 1 );
         return scratchBuffer.get();
     }
 
     @Override
-    public short readShort() throws IOException
+    public short readShort() throws PackStreamException.InputFailure
     {
         fillScratchBuffer( 2 );
         return scratchBuffer.getShort();
     }
 
     @Override
-    public int readInt() throws IOException
+    public int readInt() throws PackStreamException.InputFailure
     {
         fillScratchBuffer( 4 );
         return scratchBuffer.getInt();
     }
 
     @Override
-    public long readLong() throws IOException
+    public long readLong() throws PackStreamException.InputFailure
     {
         fillScratchBuffer( 8 );
         return scratchBuffer.getLong();
     }
 
     @Override
-    public double readDouble() throws IOException
+    public double readDouble() throws PackStreamException.InputFailure
     {
         fillScratchBuffer( 8 );
         return scratchBuffer.getDouble();
     }
 
     @Override
-    public PackInput readBytes( byte[] into, int offset, int toRead ) throws IOException
+    public PackInput readBytes( byte[] into, int offset, int toRead ) throws PackStreamException.InputFailure
     {
         ByteBuffer dst = ByteBuffer.wrap( into, offset, toRead );
         read( dst );
@@ -148,7 +147,7 @@ public class BufferingChunkedInput implements PackInput
     }
 
     @Override
-    public byte peekByte() throws IOException
+    public byte peekByte() throws PackStreamException.InputFailure
     {
         assertOneByteInBuffer();
         return buffer.get( buffer.position() );
@@ -164,39 +163,27 @@ public class BufferingChunkedInput implements PackInput
         return remainingChunkSize > 0;
     }
 
-    private Runnable onMessageComplete = new Runnable()
+    private MessageFormat.Reader.CompletionHandler onMessageComplete = new MessageFormat.Reader.CompletionHandler()
     {
         @Override
-        public void run()
+        public void run() throws PackStreamException.InputFailure
         {
             // the on message complete should only be called when no data unread from the message buffer
             if ( hasMoreDataUnreadInCurrentChunk() )
             {
-                throw new ClientException( "Trying to read message complete ending '00 00' while there are more data " +
-                                           "left in the message content unread: buffer [" +
-                                           BytePrinter.hexInOneLine( buffer, buffer.position(), buffer.remaining() ) +
-                                           "], unread chunk size " + remainingChunkSize );
+                throw new PackStreamException.UnexpectedData(
+                        BytePrinter.hexInOneLine( buffer, buffer.position(), buffer.remaining() ), remainingChunkSize );
             }
-            try
+            // read message boundary
+            readChunkSize();
+            if ( remainingChunkSize != 0 )
             {
-                // read message boundary
-                readChunkSize();
-                if ( remainingChunkSize != 0 )
-                {
-                    throw new ClientException( "Expecting message complete ending '00 00', but got " +
-                                               BytePrinter.hex( ByteBuffer.allocate( 2 )
-                                                       .putShort( (short) remainingChunkSize ) ) );
-                }
+                throw new PackStreamException.InvalidChunkSize( remainingChunkSize );
             }
-            catch ( IOException e )
-            {
-                throw new ClientException( "Error while receiving message complete ending '00 00'.", e );
-            }
-
         }
     };
 
-    public Runnable messageBoundaryHook()
+    public MessageFormat.Reader.CompletionHandler messageBoundaryHook()
     {
         return this.onMessageComplete;
     }
@@ -206,9 +193,8 @@ public class BufferingChunkedInput implements PackInput
      * enough data in the buffer more data will be read from the channel.
      *
      * @param bytesToRead The number of bytes to transfer to the scratch buffer.
-     * @throws IOException
      */
-    private void fillScratchBuffer( int bytesToRead ) throws IOException
+    private void fillScratchBuffer( int bytesToRead ) throws PackStreamException.InputFailure
     {
         assert (bytesToRead <= scratchBuffer.capacity());
         scratchBuffer.clear();
@@ -234,9 +220,8 @@ public class BufferingChunkedInput implements PackInput
      * of data in the internal buffer more data is fetched from the underlying channel.
      *
      * @param dst The buffer to write data to.
-     * @throws IOException
      */
-    private void read( ByteBuffer dst ) throws IOException
+    private void read( ByteBuffer dst ) throws PackStreamException.InputFailure
     {
         while ( true )
         {
@@ -291,9 +276,8 @@ public class BufferingChunkedInput implements PackInput
 
     /**
      * Makes sure there is at least one byte in the internal buffer (${@link #buffer}).
-     * @throws IOException
      */
-    private void assertOneByteInBuffer() throws IOException
+    private void assertOneByteInBuffer() throws PackStreamException.InputFailure
     {
         while ( true )
         {
@@ -328,9 +312,8 @@ public class BufferingChunkedInput implements PackInput
 
     /**
      * Reads the size of the next chunk and stores it in ${@link #remainingChunkSize}.
-     * @throws IOException
      */
-    private void readChunkSize() throws IOException
+    private void readChunkSize() throws PackStreamException.InputFailure
     {
         while ( true )
         {
@@ -397,9 +380,8 @@ public class BufferingChunkedInput implements PackInput
      * Read data from the underlying channel into the buffer.
      * @param channel The channel to read from.
      * @param buffer The buffer to read into
-     * @throws IOException
      */
-    static void readNextPacket( ReadableByteChannel channel, ByteBuffer buffer ) throws IOException
+    static void readNextPacket( ReadableByteChannel channel, ByteBuffer buffer ) throws PackStreamException.InputFailure
     {
         assert !buffer.hasRemaining();
 
@@ -409,6 +391,7 @@ public class BufferingChunkedInput implements PackInput
             int read = channel.read( buffer );
             if ( read == -1 )
             {
+                PackStreamException.EndOfStream eos = new PackStreamException.EndOfStream( 0 );
                 try
                 {
                     channel.close();
@@ -416,26 +399,14 @@ public class BufferingChunkedInput implements PackInput
                 catch ( IOException e )
                 {
                     // best effort
+                    eos.addSuppressed( e );
                 }
-                throw new ServiceUnavailableException(
-                        "Connection terminated while receiving data. This can happen due to network " +
-                        "instabilities, or due to restarts of the database." );
+                throw eos;
             }
-        }
-        catch ( ClosedByInterruptException e )
-        {
-            throw new ServiceUnavailableException(
-                    "Connection to the database was lost because someone called `interrupt()` on the driver " +
-                    "thread waiting for a reply. " +
-                    "This normally happens because the JVM is shutting down, but it can also happen because your " +
-                    "application code or some " +
-                    "framework you are using is manually interrupting the thread." );
         }
         catch ( IOException e )
         {
-            String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-            throw new ServiceUnavailableException(
-                    "Unable to process request: " + message + " buffer: \n" + BytePrinter.hex( buffer ), e );
+            throw new PackStreamException.InputFailure( e );
         }
         finally
         {

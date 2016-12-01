@@ -24,6 +24,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
+import org.neo4j.driver.internal.exceptions.ConnectionException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.internal.spi.Collector;
 import org.neo4j.driver.internal.summary.SummaryBuilder;
@@ -285,7 +287,7 @@ public class InternalStatementResult implements StatementResult
         {
             do
             {
-                connection.receiveOne();
+                receiveOne();
                 recordBuffer.clear();
             }
             while ( !done );
@@ -308,9 +310,21 @@ public class InternalStatementResult implements StatementResult
             {
                 return false;
             }
-            connection.receiveOne();
+            receiveOne();
         }
 
         return true;
+    }
+
+    private void receiveOne()
+    {
+        try
+        {
+            connection.receiveOne();
+        }
+        catch ( PackStreamException | ConnectionException e )
+        {
+            throw e.publicException();
+        }
     }
 }

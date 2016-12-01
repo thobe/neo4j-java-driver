@@ -18,7 +18,7 @@
  */
 package org.neo4j.driver.internal.packstream;
 
-import java.io.IOException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 
 /**
  * This is where {@link PackStream} writes its output to.
@@ -26,23 +26,23 @@ import java.io.IOException;
 public interface PackOutput
 {
     /** If implementation has been buffering data, it should flush those buffers now. */
-    PackOutput flush() throws IOException;
+    PackOutput flush() throws PackStreamException.OutputFailure;
 
     /** Produce a single byte */
-    PackOutput writeByte( byte value ) throws IOException;
+    PackOutput writeByte( byte value ) throws PackStreamException.OutputFailure;
 
     /** Produce binary data */
-    PackOutput writeBytes( byte[] data, int offset, int amountToWrite ) throws IOException;
+    PackOutput writeBytes( byte[] data, int offset, int amountToWrite ) throws PackStreamException.OutputFailure;
 
     /** Produce a 4-byte signed integer */
-    PackOutput writeShort( short value ) throws IOException;
+    PackOutput writeShort( short value ) throws PackStreamException.OutputFailure;
 
     /** Produce a 4-byte signed integer */
-    PackOutput writeInt( int value ) throws IOException;
+    PackOutput writeInt( int value ) throws PackStreamException.OutputFailure;
 
     /** Produce an 8-byte signed integer */
-    PackOutput writeLong( long value ) throws IOException;
+    PackOutput writeLong( long value ) throws PackStreamException.OutputFailure;
 
     /** Produce an 8-byte IEEE 754 "double format" floating-point number */
-    PackOutput writeDouble( double value ) throws IOException;
+    PackOutput writeDouble( double value ) throws PackStreamException.OutputFailure;
 }

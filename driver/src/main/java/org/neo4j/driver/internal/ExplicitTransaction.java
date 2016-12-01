@@ -21,8 +21,10 @@ package org.neo4j.driver.internal;
 import java.util.Collections;
 import java.util.Map;
 
-import org.neo4j.driver.internal.spi.Connection;
+import org.neo4j.driver.internal.exceptions.ConnectionException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.spi.Collector;
+import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.internal.types.InternalTypeSystem;
 import org.neo4j.driver.v1.Record;
 import org.neo4j.driver.v1.Statement;
@@ -36,7 +38,6 @@ import org.neo4j.driver.v1.types.TypeSystem;
 
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
-
 import static org.neo4j.driver.v1.Values.ofValue;
 import static org.neo4j.driver.v1.Values.value;
 
@@ -91,8 +92,15 @@ class ExplicitTransaction implements Transaction
         {
             parameters = singletonMap( "bookmark", value( bookmark ) );
         }
-        conn.run( "BEGIN", parameters, Collector.NO_OP );
-        conn.pullAll( Collector.NO_OP );
+        try
+        {
+            conn.run( "BEGIN", parameters, Collector.NO_OP );
+            conn.pullAll( Collector.NO_OP );
+        }
+        catch ( PackStreamException | ConnectionException e )
+        {
+            throw e.publicException();
+        }
     }
 
     @Override
@@ -135,6 +143,10 @@ class ExplicitTransaction implements Transaction
                     state = State.ROLLED_BACK;
                 }
             }
+        }
+        catch ( PackStreamException | ConnectionException e )
+        {
+            throw e.publicException();
         }
         finally
         {
@@ -184,12 +196,12 @@ class ExplicitTransaction implements Transaction
             conn.flush();
             return cursor;
         }
-        catch ( Neo4jException e )
+        catch ( PackStreamException | ConnectionException e )
         {
             // Failed to send messages to the server probably due to IOException in the socket.
             // So we should stop sending more messages in this transaction
             state = State.FAILED;
-            throw e;
+            throw e.publicException();
         }
     }
 

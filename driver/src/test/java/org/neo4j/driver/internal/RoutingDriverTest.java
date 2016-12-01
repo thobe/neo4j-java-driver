@@ -29,6 +29,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import org.neo4j.driver.internal.cluster.RoutingSettings;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 import org.neo4j.driver.internal.spi.Collector;
 import org.neo4j.driver.internal.spi.Connection;
@@ -67,7 +68,7 @@ public class RoutingDriverTest
     private final Logging logging = EventLogger.provider( events, EventLogger.Level.TRACE );
 
     @Test
-    public void shouldDoRoutingOnInitialization()
+    public void shouldDoRoutingOnInitialization() throws PackStreamException
     {
         // Given
         ConnectionPool pool = poolWithServers(
@@ -84,7 +85,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldDoReRoutingOnSessionAcquisitionIfNecessary()
+    public void shouldDoReRoutingOnSessionAcquisitionIfNecessary() throws PackStreamException
     {
         // Given
         RoutingDriver routingDriver = driverWithPool( pool(
@@ -103,7 +104,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldNotDoReRoutingOnSessionAcquisitionIfNotNecessary()
+    public void shouldNotDoReRoutingOnSessionAcquisitionIfNotNecessary() throws PackStreamException
     {
         // Given
         RoutingDriver routingDriver = driverWithPool( pool(
@@ -124,7 +125,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldFailIfNoRouting()
+    public void shouldFailIfNoRouting() throws PackStreamException
     {
         // Given
         ConnectionPool pool = pool( new ThrowsException( new ClientException(
@@ -143,7 +144,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldFailIfNoRoutersProvided()
+    public void shouldFailIfNoRoutersProvided() throws PackStreamException
     {
         // Given
         ConnectionPool pool = poolWithServers(
@@ -165,7 +166,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldFailIfNoWritersProvided()
+    public void shouldFailIfNoWritersProvided() throws PackStreamException
     {
         // Given
         ConnectionPool pool = poolWithServers(
@@ -187,7 +188,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldForgetAboutServersOnRerouting()
+    public void shouldForgetAboutServersOnRerouting() throws PackStreamException
     {
         // Given
         ConnectionPool pool = pool(
@@ -210,7 +211,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldRediscoverOnTimeout()
+    public void shouldRediscoverOnTimeout() throws PackStreamException
     {
         // Given
         RoutingDriver routingDriver = driverWithPool( pool(
@@ -233,7 +234,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldNotRediscoverWhenNoTimeout()
+    public void shouldNotRediscoverWhenNoTimeout() throws PackStreamException
     {
         // Given
         RoutingDriver routingDriver = driverWithPool( pool(
@@ -255,7 +256,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldRoundRobinAmongReadServers()
+    public void shouldRoundRobinAmongReadServers() throws PackStreamException
     {
         // Given
         RoutingDriver routingDriver = driverWithServers( 60, serverInfo( "ROUTE", "localhost:1111", "localhost:1112" ),
@@ -280,7 +281,7 @@ public class RoutingDriverTest
     }
 
     @Test
-    public void shouldRoundRobinAmongWriteServers()
+    public void shouldRoundRobinAmongWriteServers() throws PackStreamException
     {
         // Given
         RoutingDriver routingDriver = driverWithServers( 60, serverInfo( "ROUTE", "localhost:1111", "localhost:1112" ),
@@ -305,7 +306,8 @@ public class RoutingDriverTest
     }
 
     @SafeVarargs
-    private final RoutingDriver driverWithServers( long ttl, Map<String,Object>... serverInfo )
+    private final RoutingDriver driverWithServers( long ttl, Map<String,Object>... serverInfo ) throws
+            PackStreamException
     {
         return driverWithPool( poolWithServers( ttl, serverInfo ) );
     }
@@ -316,7 +318,8 @@ public class RoutingDriverTest
     }
 
     @SafeVarargs
-    private final ConnectionPool poolWithServers( long ttl, Map<String,Object>... serverInfo )
+    private final ConnectionPool poolWithServers( long ttl, Map<String,Object>... serverInfo ) throws
+            PackStreamException
     {
         return pool( withServers( ttl, serverInfo ) );
     }
@@ -332,7 +335,8 @@ public class RoutingDriverTest
         return new BoltServerAddress( host, port );
     }
 
-    private ConnectionPool pool( final Answer toGetServers, final Answer... furtherGetServers )
+    private ConnectionPool pool( final Answer toGetServers, final Answer... furtherGetServers ) throws
+            PackStreamException
     {
         ConnectionPool pool = mock( ConnectionPool.class );
 

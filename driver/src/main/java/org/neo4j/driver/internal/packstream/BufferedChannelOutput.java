@@ -18,10 +18,11 @@
  */
 package org.neo4j.driver.internal.packstream;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.WritableByteChannel;
+
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 
 public class BufferedChannelOutput implements PackOutput
 {
@@ -50,16 +51,27 @@ public class BufferedChannelOutput implements PackOutput
     }
 
     @Override
-    public BufferedChannelOutput flush() throws IOException
+    public BufferedChannelOutput flush() throws PackStreamException.OutputFailure
     {
         buffer.flip();
-        do { channel.write( buffer ); } while ( buffer.remaining() > 0 );
+        try
+        {
+            do
+            {
+                channel.write( buffer );
+            }
+            while ( buffer.remaining() > 0 );
+        }
+        catch ( Exception e )
+        {
+            throw new PackStreamException.OutputFailure( e );
+        }
         buffer.clear();
         return this;
     }
 
     @Override
-    public PackOutput writeBytes( byte[] data, int offset, int length ) throws IOException
+    public PackOutput writeBytes( byte[] data, int offset, int length ) throws PackStreamException.OutputFailure
     {
         int index = 0;
         while ( index < length )
@@ -78,7 +90,7 @@ public class BufferedChannelOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeByte( byte value ) throws IOException
+    public PackOutput writeByte( byte value ) throws PackStreamException.OutputFailure
     {
         ensure( 1 );
         buffer.put( value );
@@ -86,7 +98,7 @@ public class BufferedChannelOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeShort( short value ) throws IOException
+    public PackOutput writeShort( short value ) throws PackStreamException.OutputFailure
     {
         ensure( 2 );
         buffer.putShort( value );
@@ -94,7 +106,7 @@ public class BufferedChannelOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeInt( int value ) throws IOException
+    public PackOutput writeInt( int value ) throws PackStreamException.OutputFailure
     {
         ensure( 4 );
         buffer.putInt( value );
@@ -102,7 +114,7 @@ public class BufferedChannelOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeLong( long value ) throws IOException
+    public PackOutput writeLong( long value ) throws PackStreamException.OutputFailure
     {
         ensure( 8 );
         buffer.putLong( value );
@@ -110,14 +122,14 @@ public class BufferedChannelOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeDouble( double value ) throws IOException
+    public PackOutput writeDouble( double value ) throws PackStreamException.OutputFailure
     {
         ensure( 8 );
         buffer.putDouble( value );
         return this;
     }
 
-    private void ensure( int size ) throws IOException
+    private void ensure( int size ) throws PackStreamException.OutputFailure
     {
         if ( buffer.remaining() < size )
         {

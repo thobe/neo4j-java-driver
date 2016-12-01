@@ -18,7 +18,6 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
 import java.util.Map;
 
 import org.neo4j.driver.v1.Value;
@@ -42,7 +41,7 @@ public class InitMessage implements Message
     }
 
     @Override
-    public void dispatch( MessageHandler handler ) throws IOException
+    public <Failure extends Exception> void dispatch( MessageHandler<Failure> handler ) throws Failure
     {
         handler.handleInitMessage( userAgent, authToken );
     }

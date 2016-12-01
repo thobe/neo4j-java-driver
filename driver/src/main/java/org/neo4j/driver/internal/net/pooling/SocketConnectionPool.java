@@ -21,9 +21,10 @@ package org.neo4j.driver.internal.net.pooling;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.driver.internal.ConnectionSettings;
+import org.neo4j.driver.internal.exceptions.ConnectionException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 import org.neo4j.driver.internal.net.ConcurrencyGuardingConnection;
 import org.neo4j.driver.internal.net.SocketConnection;
@@ -32,7 +33,6 @@ import org.neo4j.driver.internal.security.SecurityPlan;
 import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.internal.spi.ConnectionPool;
 import org.neo4j.driver.internal.util.Clock;
-import org.neo4j.driver.internal.util.Supplier;
 import org.neo4j.driver.v1.AuthToken;
 import org.neo4j.driver.v1.AuthTokens;
 import org.neo4j.driver.v1.Logging;
@@ -79,7 +79,7 @@ public class SocketConnectionPool implements ConnectionPool
         this.logging = logging;
     }
 
-    private Connection connect( BoltServerAddress address ) throws ClientException
+    private Connection connect( BoltServerAddress address ) throws PackStreamException, ConnectionException
     {
         Connection conn = new SocketConnection( address, securityPlan, logging );
 
@@ -105,13 +105,13 @@ public class SocketConnectionPool implements ConnectionPool
     }
 
     @Override
-    public Connection acquire( final BoltServerAddress address )
+    public Connection acquire( final BoltServerAddress address ) throws PackStreamException
     {
         final BlockingPooledConnectionQueue connections = pool( address );
-        Supplier<PooledConnection> supplier = new Supplier<PooledConnection>()
+        Connector supplier = new Connector()
         {
             @Override
-            public PooledConnection get()
+            public PooledConnection newConnection() throws PackStreamException, ConnectionException
             {
                 return new PooledConnection( connect( address ), new
                         PooledConnectionReleaseConsumer( connections,

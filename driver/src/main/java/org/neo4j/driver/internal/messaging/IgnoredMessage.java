@@ -18,8 +18,6 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
-
 /**
  * IGNORED response message
  * <p>
@@ -31,7 +29,7 @@ public class IgnoredMessage implements Message
     public static final IgnoredMessage IGNORED = new IgnoredMessage();
 
     @Override
-    public void dispatch( MessageHandler handler ) throws IOException
+    public <Failure extends Exception> void dispatch( MessageHandler<Failure> handler ) throws Failure
     {
         handler.handleIgnoredMessage();
     }

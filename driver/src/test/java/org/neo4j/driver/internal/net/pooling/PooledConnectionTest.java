@@ -22,6 +22,7 @@ import org.junit.Test;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.internal.util.Clock;
 import org.neo4j.driver.v1.exceptions.ClientException;
@@ -243,7 +244,7 @@ public class PooledConnectionTest
     }
 
     @Test
-    public void shouldNotAckFailureOnUnRecoverableFailure()
+    public void shouldNotAckFailureOnUnRecoverableFailure() throws PackStreamException
     {
         // Given
         Connection conn = mock( Connection.class );
@@ -270,7 +271,7 @@ public class PooledConnectionTest
     }
 
     @Test
-    public void shouldThrowExceptionIfFailureReceivedForAckFailure()
+    public void shouldThrowExceptionIfFailureReceivedForAckFailure() throws PackStreamException
     {
         // Given
         Connection conn = mock( Connection.class );

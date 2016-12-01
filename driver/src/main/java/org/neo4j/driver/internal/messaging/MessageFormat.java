@@ -18,30 +18,42 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 
 public interface MessageFormat
 {
     interface Writer
     {
-        Writer write( Message msg ) throws IOException;
+        interface CompletionHandler
+        {
+            void run() throws PackStreamException.OutputFailure;
+        }
 
-        Writer flush() throws IOException;
+        Writer write( Message msg ) throws PackStreamException.SerializationFailure;
+
+        Writer flush() throws PackStreamException.OutputFailure;
 
         Writer reset( WritableByteChannel channel );
     }
 
     interface Reader
     {
+        interface CompletionHandler
+        {
+            void run() throws PackStreamException.InputFailure;
+        }
+
         /**
          * Return true is there is another message in the underlying buffer
          */
-        boolean hasNext() throws IOException;
+        boolean hasNext() throws PackStreamException.InputFailure;
 
-        void read( MessageHandler handler ) throws IOException;
-
+        <Failure extends Exception> void read( MessageHandler<Failure> handler ) throws
+                PackStreamException.DeserializationFailure,
+                Failure;
     }
 
     Writer newWriter( WritableByteChannel ch );

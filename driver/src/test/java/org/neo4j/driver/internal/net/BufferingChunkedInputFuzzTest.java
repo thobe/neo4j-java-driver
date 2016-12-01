@@ -26,6 +26,8 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
+
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 
@@ -33,7 +35,7 @@ public class BufferingChunkedInputFuzzTest
 {
 
     @Test
-    public void shouldHandleAllMessageBoundaries() throws IOException
+    public void shouldHandleAllMessageBoundaries() throws PackStreamException
     {
         byte[] expected = new byte[256];
         for ( int i = 0; i < 256; i++ )
@@ -52,7 +54,7 @@ public class BufferingChunkedInputFuzzTest
     }
 
     @Test
-    public void messageSizeFuzzTest() throws IOException
+    public void messageSizeFuzzTest() throws PackStreamException
     {
         int maxSize = 1 << 16; // 0x10000
         Random random = new Random();

@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.logging.DevNullLogger;
 import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.internal.types.InternalTypeSystem;
@@ -119,10 +120,17 @@ public class NetworkSession implements Session
     public static StatementResult run( Connection connection, Statement statement )
     {
         InternalStatementResult cursor = new InternalStatementResult( connection, null, statement );
-        connection.run( statement.text(), statement.parameters().asMap( Values.ofValue() ),
-                cursor.runResponseCollector() );
-        connection.pullAll( cursor.pullAllResponseCollector() );
-        connection.flush();
+        try
+        {
+            connection.run( statement.text(), statement.parameters().asMap( Values.ofValue() ),
+                    cursor.runResponseCollector() );
+            connection.pullAll( cursor.pullAllResponseCollector() );
+            connection.flush();
+        }
+        catch ( PackStreamException e )
+        {
+            throw e.publicException();
+        }
         return cursor;
     }
 
@@ -138,7 +146,14 @@ public class NetworkSession implements Session
             lastBookmark = currentTransaction.bookmark();
             currentTransaction = null;
         }
-        connection.resetAsync();
+        try
+        {
+            connection.resetAsync();
+        }
+        catch ( PackStreamException e )
+        {
+            throw e.publicException();
+        }
     }
 
     @Override
@@ -181,6 +196,10 @@ public class NetworkSession implements Session
         try
         {
             connection.sync();
+        }
+        catch ( PackStreamException e )
+        {
+            throw e.publicException();
         }
         finally
         {

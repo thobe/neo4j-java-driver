@@ -18,7 +18,7 @@
  */
 package org.neo4j.driver.internal.packstream;
 
-import java.io.IOException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 
 /**
  * This is what {@link PackStream} uses to ingest data, implement this on top of any data source of your choice to
@@ -27,26 +27,26 @@ import java.io.IOException;
 public interface PackInput
 {
     /** True if there is at least one more consumable byte */
-    boolean hasMoreData() throws IOException;
+    boolean hasMoreData() throws PackStreamException.InputFailure;
 
     /** Consume one byte */
-    byte readByte() throws IOException;
+    byte readByte() throws PackStreamException.InputFailure;
 
     /** Consume a 2-byte signed integer */
-    short readShort() throws IOException;
+    short readShort() throws PackStreamException.InputFailure;
 
     /** Consume a 4-byte signed integer */
-    int readInt() throws IOException;
+    int readInt() throws PackStreamException.InputFailure;
 
     /** Consume an 8-byte signed integer */
-    long readLong() throws IOException;
+    long readLong() throws PackStreamException.InputFailure;
 
     /** Consume an 8-byte IEEE 754 "double format" floating-point number */
-    double readDouble() throws IOException;
+    double readDouble() throws PackStreamException.InputFailure;
 
     /** Consume a specified number of bytes */
-    PackInput readBytes( byte[] into, int offset, int toRead ) throws IOException;
+    PackInput readBytes( byte[] into, int offset, int toRead ) throws PackStreamException.InputFailure;
 
     /** Get the next byte without forwarding the internal pointer */
-    byte peekByte() throws IOException;
+    byte peekByte() throws PackStreamException.InputFailure;
 }

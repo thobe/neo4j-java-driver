@@ -35,7 +35,7 @@ public class LoggingByteChannel implements ByteChannel
     private final Logger logger;
 
 
-    public LoggingByteChannel( ByteChannel delegate, Logger logger ) throws IOException
+    public LoggingByteChannel( ByteChannel delegate, Logger logger )
     {
         this.delegate = delegate;
         this.logger = logger;

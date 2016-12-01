@@ -18,7 +18,6 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
@@ -31,6 +30,7 @@ import java.util.Map;
 import org.neo4j.driver.internal.InternalNode;
 import org.neo4j.driver.internal.InternalPath;
 import org.neo4j.driver.internal.InternalRelationship;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BufferingChunkedInput;
 import org.neo4j.driver.internal.net.ChunkedOutput;
 import org.neo4j.driver.internal.packstream.PackInput;
@@ -45,7 +45,6 @@ import org.neo4j.driver.internal.value.NodeValue;
 import org.neo4j.driver.internal.value.PathValue;
 import org.neo4j.driver.internal.value.RelationshipValue;
 import org.neo4j.driver.v1.Value;
-import org.neo4j.driver.v1.exceptions.ClientException;
 import org.neo4j.driver.v1.types.Entity;
 import org.neo4j.driver.v1.types.Node;
 import org.neo4j.driver.v1.types.Path;
@@ -98,23 +97,23 @@ public class PackStreamMessageFormatV1 implements MessageFormat
         return VERSION;
     }
 
-    public static class Writer implements MessageFormat.Writer, MessageHandler
+    public static class Writer implements MessageFormat.Writer, MessageHandler<PackStreamException.SerializationFailure>
     {
         private final PackStream.Packer packer;
-        private final Runnable onMessageComplete;
+        private final CompletionHandler onMessageComplete;
 
         /**
          * @param output interface to write messages to
          * @param onMessageComplete invoked for each message, after it's done writing to the output
          */
-        public Writer( PackOutput output, Runnable onMessageComplete )
+        public Writer( PackOutput output, CompletionHandler onMessageComplete )
         {
             this.onMessageComplete = onMessageComplete;
             packer = new PackStream.Packer( output );
         }
 
         @Override
-        public void handleInitMessage( String clientNameAndVersion, Map<String,Value> authToken ) throws IOException
+        public void handleInitMessage( String clientNameAndVersion, Map<String,Value> authToken ) throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 1, MSG_INIT );
             packer.pack( clientNameAndVersion );
@@ -123,7 +122,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
         }
 
         @Override
-        public void handleRunMessage( String statement, Map<String,Value> parameters ) throws IOException
+        public void handleRunMessage( String statement, Map<String,Value> parameters ) throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 2, MSG_RUN );
             packer.pack( statement );
@@ -132,35 +131,35 @@ public class PackStreamMessageFormatV1 implements MessageFormat
         }
 
         @Override
-        public void handlePullAllMessage() throws IOException
+        public void handlePullAllMessage() throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 0, MSG_PULL_ALL );
             onMessageComplete.run();
         }
 
         @Override
-        public void handleDiscardAllMessage() throws IOException
+        public void handleDiscardAllMessage() throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 0, MSG_DISCARD_ALL );
             onMessageComplete.run();
         }
 
         @Override
-        public void handleResetMessage() throws IOException
+        public void handleResetMessage() throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 0, MSG_RESET );
             onMessageComplete.run();
         }
 
         @Override
-        public void handleAckFailureMessage() throws IOException
+        public void handleAckFailureMessage() throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 0, MSG_ACK_FAILURE );
             onMessageComplete.run();
         }
 
         @Override
-        public void handleSuccessMessage( Map<String,Value> meta ) throws IOException
+        public void handleSuccessMessage( Map<String,Value> meta ) throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 1, MSG_SUCCESS );
             packRawMap( meta );
@@ -168,7 +167,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
         }
 
         @Override
-        public void handleRecordMessage( Value[] fields ) throws IOException
+        public void handleRecordMessage( Value[] fields ) throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 1, MSG_RECORD );
             packer.packListHeader( fields.length );
@@ -180,7 +179,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
         }
 
         @Override
-        public void handleFailureMessage( String code, String message ) throws IOException
+        public void handleFailureMessage( String code, String message ) throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 1, MSG_FAILURE );
             packer.packMapHeader( 2 );
@@ -194,13 +193,13 @@ public class PackStreamMessageFormatV1 implements MessageFormat
         }
 
         @Override
-        public void handleIgnoredMessage() throws IOException
+        public void handleIgnoredMessage() throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( 0, MSG_IGNORED );
             onMessageComplete.run();
         }
 
-        private void packRawMap( Map<String,Value> map ) throws IOException
+        private void packRawMap( Map<String,Value> map ) throws PackStreamException.SerializationFailure
         {
             if ( map == null || map.size() == 0 )
             {
@@ -215,7 +214,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             }
         }
 
-        private void packValue( Value value ) throws IOException
+        private void packValue( Value value ) throws PackStreamException.SerializationFailure
         {
             switch ( ( (InternalValue) value ).typeConstructor() )
             {
@@ -327,19 +326,19 @@ public class PackStreamMessageFormatV1 implements MessageFormat
                     break;
 
                 default:
-                    throw new IOException( "Unknown type: " + value );
+                    throw new PackStreamException.Unpackable( value );
             }
         }
 
         @Override
-        public Writer flush() throws IOException
+        public Writer flush() throws PackStreamException.OutputFailure
         {
             packer.flush();
             return this;
         }
 
         @Override
-        public Writer write( Message msg ) throws IOException
+        public Writer write( Message msg ) throws PackStreamException.SerializationFailure
         {
             msg.dispatch( this );
             return this;
@@ -352,7 +351,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             return this;
         }
 
-        private void packNode( Node node ) throws IOException
+        private void packNode( Node node ) throws PackStreamException.SerializationFailure
         {
             packer.packStructHeader( NODE_FIELDS, NODE );
             packer.pack( node.id() );
@@ -367,7 +366,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             packProperties( node );
         }
 
-        private void packProperties( Entity entity ) throws IOException
+        private void packProperties( Entity entity ) throws PackStreamException.SerializationFailure
         {
             Iterable<String> keys = entity.keys();
             packer.packMapHeader( entity.size() );
@@ -382,16 +381,16 @@ public class PackStreamMessageFormatV1 implements MessageFormat
     public static class Reader implements MessageFormat.Reader
     {
         private final PackStream.Unpacker unpacker;
-        private final Runnable onMessageComplete;
+        private final CompletionHandler onMessageComplete;
 
-        public Reader( PackInput input, Runnable onMessageComplete )
+        public Reader( PackInput input, CompletionHandler onMessageComplete )
         {
             unpacker = new PackStream.Unpacker( input );
             this.onMessageComplete = onMessageComplete;
         }
 
         @Override
-        public boolean hasNext() throws IOException
+        public boolean hasNext() throws PackStreamException.InputFailure
         {
             return unpacker.hasNext();
         }
@@ -400,7 +399,9 @@ public class PackStreamMessageFormatV1 implements MessageFormat
          * Parse a single message into the given consumer.
          */
         @Override
-        public void read( MessageHandler handler ) throws IOException
+        public <Failure extends Exception> void read( MessageHandler<Failure> handler ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             unpacker.unpackStructHeader();
             int type = unpacker.unpackStructSignature();
@@ -434,29 +435,37 @@ public class PackStreamMessageFormatV1 implements MessageFormat
                 unpackResetMessage( handler );
                 break;
             default:
-                throw new IOException( "Unknown message type: " + type );
+                throw new PackStreamException.UnexpectedMessage( type );
             }
         }
 
-        private void unpackResetMessage( MessageHandler handler ) throws IOException
+        private <Failure extends Exception> void unpackResetMessage( MessageHandler<Failure> handler ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             handler.handleResetMessage();
             onMessageComplete.run();
         }
 
-        private void unpackInitMessage( MessageHandler handler ) throws IOException
+        private <Failure extends Exception> void unpackInitMessage( MessageHandler<Failure> handler ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             handler.handleInitMessage( unpacker.unpackString(), unpackMap() );
             onMessageComplete.run();
         }
 
-        private void unpackIgnoredMessage( MessageHandler output ) throws IOException
+        private <Failure extends Exception> void unpackIgnoredMessage( MessageHandler<Failure> output ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             output.handleIgnoredMessage();
             onMessageComplete.run();
         }
 
-        private void unpackFailureMessage( MessageHandler output ) throws IOException
+        private <Failure extends Exception> void unpackFailureMessage( MessageHandler<Failure> output ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             Map<String,Value> params = unpackMap();
             String code = params.get( "code" ).asString();
@@ -465,7 +474,9 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             onMessageComplete.run();
         }
 
-        private void unpackRunMessage( MessageHandler output ) throws IOException
+        private <Failure extends Exception> void unpackRunMessage( MessageHandler<Failure> output ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             String statement = unpacker.unpackString();
             Map<String,Value> params = unpackMap();
@@ -473,26 +484,34 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             onMessageComplete.run();
         }
 
-        private void unpackDiscardAllMessage( MessageHandler output ) throws IOException
+        private <Failure extends Exception> void unpackDiscardAllMessage( MessageHandler<Failure> output ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             output.handleDiscardAllMessage();
             onMessageComplete.run();
         }
 
-        private void unpackPullAllMessage( MessageHandler output ) throws IOException
+        private <Failure extends Exception> void unpackPullAllMessage( MessageHandler<Failure> output ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             output.handlePullAllMessage();
             onMessageComplete.run();
         }
 
-        private void unpackSuccessMessage( MessageHandler output ) throws IOException
+        private <Failure extends Exception> void unpackSuccessMessage( MessageHandler<Failure> output ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             Map<String,Value> map = unpackMap();
             output.handleSuccessMessage( map );
             onMessageComplete.run();
         }
 
-        private void unpackRecordMessage(MessageHandler output) throws IOException
+        private <Failure extends Exception> void unpackRecordMessage( MessageHandler<Failure> output ) throws
+                PackStreamException.DeserializationFailure,
+                Failure
         {
             int fieldCount = (int) unpacker.unpackListHeader();
             Value[] fields = new Value[fieldCount];
@@ -504,7 +523,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             onMessageComplete.run();
         }
 
-        private Value unpackValue() throws IOException
+        private Value unpackValue() throws PackStreamException.DeserializationFailure
         {
             PackType type = unpacker.peekNextType();
             switch ( type )
@@ -553,10 +572,10 @@ public class PackStreamMessageFormatV1 implements MessageFormat
                 }
             }
             }
-            throw new IOException( "Unknown value type: " + type );
+            throw new PackStreamException.UnsupportedType( type );
         }
 
-        private Value unpackRelationship() throws IOException
+        private Value unpackRelationship() throws PackStreamException.DeserializationFailure
         {
             long urn = unpacker.unpackLong();
             long startUrn = unpacker.unpackLong();
@@ -568,7 +587,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             return new RelationshipValue( adapted );
         }
 
-        private InternalNode unpackNode() throws IOException
+        private InternalNode unpackNode() throws PackStreamException.DeserializationFailure
         {
             long urn = unpacker.unpackLong();
 
@@ -589,7 +608,7 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             return new InternalNode( urn, labels, props );
         }
 
-        private Value unpackPath() throws IOException
+        private Value unpackPath() throws PackStreamException.DeserializationFailure
         {
             // List of unique nodes
             Node[] uniqNodes = new Node[(int) unpacker.unpackListHeader()];
@@ -647,27 +666,25 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             return new PathValue( new InternalPath( Arrays.asList( segments ), Arrays.asList( nodes ), Arrays.asList( rels ) ) );
         }
 
-        private void ensureCorrectStructSize( String structName, int expected, long actual )
+        private void ensureCorrectStructSize( String structName, int expected, long actual ) throws
+                PackStreamException.InvalidStructSize
         {
             if ( expected != actual )
             {
-                throw new ClientException( String.format(
-                        "Invalid message received, serialized %s structures should have %d fields, "
-                                + "received %s structure has %d fields.", structName, expected, structName, actual ) );
+                throw new PackStreamException.InvalidStructSize( structName, expected, actual );
             }
         }
 
-        private void ensureCorrectStructSignature( String structName, byte expected, byte actual )
+        private void ensureCorrectStructSignature( String structName, byte expected, byte actual ) throws
+                PackStreamException.InvalidStructureSignature
         {
             if ( expected != actual )
             {
-                throw new ClientException( String.format(
-                        "Invalid message received, expected a `%s`, signature 0x%s. Recieved signature was 0x%s.",
-                        structName, Integer.toHexString( expected ), Integer.toHexString( actual ) ) );
+                throw new PackStreamException.InvalidStructureSignature( structName, expected, actual );
             }
         }
 
-        private Map<String,Value> unpackMap() throws IOException
+        private Map<String,Value> unpackMap() throws PackStreamException.DeserializationFailure
         {
             int size = (int) unpacker.unpackMapHeader();
             if ( size == 0 )
@@ -683,14 +700,4 @@ public class PackStreamMessageFormatV1 implements MessageFormat
             return map;
         }
     }
-
-    public static class NoOpRunnable implements Runnable
-    {
-        @Override
-        public void run()
-        {
-            // no-op
-        }
-    }
-
 }

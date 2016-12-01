@@ -33,6 +33,7 @@ import java.util.Collections;
 import org.neo4j.driver.internal.InternalNode;
 import org.neo4j.driver.internal.InternalPath;
 import org.neo4j.driver.internal.InternalRelationship;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.ChunkedOutput;
 import org.neo4j.driver.internal.packstream.PackStream;
 import org.neo4j.driver.internal.util.BytePrinter;
@@ -126,12 +127,12 @@ public class MessageFormatTest
         unpack( format, out.toByteArray() );
     }
 
-    private void assertSerializesValue( Value value ) throws IOException
+    private void assertSerializesValue( Value value ) throws PackStreamException
     {
         assertSerializes( new RecordMessage( new Value[]{value} ) );
     }
 
-    private void assertSerializes( Message... messages ) throws IOException
+    private void assertSerializes( Message... messages ) throws PackStreamException
     {
         // Pack
         final ByteArrayOutputStream out = new ByteArrayOutputStream( 128 );
@@ -147,7 +148,7 @@ public class MessageFormatTest
         assertThat( unpackedMessages.toString(), equalTo( asList( messages ).toString() ) );
     }
 
-    private ArrayList<Message> unpack( MessageFormat format, byte[] bytes ) throws IOException
+    private ArrayList<Message> unpack( MessageFormat format, byte[] bytes )
     {
         try
         {

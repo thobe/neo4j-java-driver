@@ -18,12 +18,12 @@
  */
 package org.neo4j.driver.internal.net;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
+import org.neo4j.driver.internal.messaging.MessageFormat;
 import org.neo4j.driver.internal.packstream.PackOutput;
-import org.neo4j.driver.v1.exceptions.ClientException;
 
 import static java.lang.Math.max;
 
@@ -54,19 +54,26 @@ public class ChunkedOutput implements PackOutput
     }
 
     @Override
-    public PackOutput flush() throws IOException
+    public PackOutput flush() throws PackStreamException.OutputFailure
     {
         closeChunkIfOpen();
 
-        buffer.flip();
-        channel.write( buffer );
-        buffer.clear();
+        try
+        {
+            buffer.flip();
+            channel.write( buffer );
+            buffer.clear();
+        }
+        catch ( Exception e )
+        {
+            throw new PackStreamException.OutputFailure( e );
+        }
 
         return this;
     }
 
     @Override
-    public PackOutput writeByte( byte value ) throws IOException
+    public PackOutput writeByte( byte value ) throws PackStreamException.OutputFailure
     {
         ensure( 1 );
         buffer.put( value );
@@ -74,7 +81,7 @@ public class ChunkedOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeShort( short value ) throws IOException
+    public PackOutput writeShort( short value ) throws PackStreamException.OutputFailure
     {
         ensure( 2 );
         buffer.putShort( value );
@@ -82,7 +89,7 @@ public class ChunkedOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeInt( int value ) throws IOException
+    public PackOutput writeInt( int value ) throws PackStreamException.OutputFailure
     {
         ensure( 4 );
         buffer.putInt( value );
@@ -90,7 +97,7 @@ public class ChunkedOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeLong( long value ) throws IOException
+    public PackOutput writeLong( long value ) throws PackStreamException.OutputFailure
     {
         ensure( 8 );
         buffer.putLong( value );
@@ -98,7 +105,7 @@ public class ChunkedOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeDouble( double value ) throws IOException
+    public PackOutput writeDouble( double value ) throws PackStreamException.OutputFailure
     {
         ensure( 8 );
         buffer.putDouble( value );
@@ -106,7 +113,7 @@ public class ChunkedOutput implements PackOutput
     }
 
     @Override
-    public PackOutput writeBytes( byte[] data, int offset, int length ) throws IOException
+    public PackOutput writeBytes( byte[] data, int offset, int length ) throws PackStreamException.OutputFailure
     {
         while ( offset < length )
         {
@@ -132,7 +139,7 @@ public class ChunkedOutput implements PackOutput
         }
     }
 
-    private PackOutput ensure( int size ) throws IOException
+    private PackOutput ensure( int size ) throws PackStreamException.OutputFailure
     {
         int toWriteSize = chunkOpen ? size : size + CHUNK_HEADER_SIZE;
         if ( buffer.remaining() < toWriteSize )
@@ -150,38 +157,29 @@ public class ChunkedOutput implements PackOutput
         return this;
     }
 
-    private Runnable onMessageComplete = new Runnable()
+    private MessageFormat.Writer.CompletionHandler onMessageComplete = new MessageFormat.Writer.CompletionHandler()
     {
         @Override
-        public void run()
+        public void run() throws PackStreamException.OutputFailure
         {
-            try
+            closeChunkIfOpen();
+
+            // Ensure there's space to write the message boundary
+            if ( buffer.remaining() < CHUNK_HEADER_SIZE )
             {
-                closeChunkIfOpen();
-
-                // Ensure there's space to write the message boundary
-                if ( buffer.remaining() < CHUNK_HEADER_SIZE )
-                {
-                    flush();
-                }
-
-                // Write message boundary
-                buffer.putShort( MESSAGE_BOUNDARY );
-
-                // Mark us as not currently in a chunk
-                chunkOpen = false;
-            }
-            catch ( IOException e )
-            {
-                throw new ClientException( "Error while sending message complete ending '00 00'.", e );
+                flush();
             }
 
+            // Write message boundary
+            buffer.putShort( MESSAGE_BOUNDARY );
+
+            // Mark us as not currently in a chunk
+            chunkOpen = false;
         }
     };
 
-    public Runnable messageBoundaryHook()
+    public MessageFormat.Writer.CompletionHandler messageBoundaryHook()
     {
         return onMessageComplete;
     }
-
 }

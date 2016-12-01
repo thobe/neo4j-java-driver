@@ -18,8 +18,6 @@
  */
 package org.neo4j.driver.internal.net.pooling;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.neo4j.driver.internal.util.Consumer;
 import org.neo4j.driver.v1.util.Function;
 

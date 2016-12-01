@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 import org.neo4j.driver.internal.spi.Collector;
 import org.neo4j.driver.internal.spi.Connection;
@@ -131,26 +132,25 @@ public class ConnectionInvalidationTest
     public void shouldInvalidateOnUnrecoverableProblems() throws Throwable
     {
         // When/Then
-        assertUnrecoverable( new ClientException( "Hello, world!", new IOException() ) );
-        assertUnrecoverable( new ClientException( "Hello, world!" ) );
+        assertUnrecoverable( new PackStreamException.InputFailure( new IOException() ) );
     }
 
     @Test
     public void shouldNotInvalidateOnKnownRecoverableExceptions() throws Throwable
     {
-        assertRecoverable( new ClientException( "Neo.ClientError.General.ReadOnly", "Hello, world!" ) );
-        assertRecoverable( new TransientException( "Neo.TransientError.General.ReadOnly", "Hello, world!" ) );
+        assertRecoverable( new PackStreamException.ServerFailure( "Neo.ClientError.General.ReadOnly", "Hello, world!" ) );
+        assertRecoverable( new PackStreamException.ServerFailure( "Neo.TransientError.General.ReadOnly", "Hello, world!" ) );
     }
 
     @Test
     public void shouldInvalidateOnProtocolViolationExceptions() throws Throwable
     {
-        assertUnrecoverable( new ClientException( "Neo.ClientError.Request.InvalidFormat", "Hello, world!" ) );
-        assertUnrecoverable( new ClientException( "Neo.ClientError.Request.Invalid", "Hello, world!" ) );
+        assertUnrecoverable( new PackStreamException.ServerFailure( "Neo.ClientError.Request.InvalidFormat", "Hello, world!" ) );
+        assertUnrecoverable( new PackStreamException.ServerFailure( "Neo.ClientError.Request.Invalid", "Hello, world!" ) );
     }
 
     @SuppressWarnings( "unchecked" )
-    private void assertUnrecoverable( Neo4jException exception )
+    private void assertUnrecoverable( PackStreamException exception ) throws PackStreamException
     {
         doThrow( exception ).when( delegate )
                 .run( eq( "assert unrecoverable" ), anyMap(), any( Collector.class ) );
@@ -161,7 +161,7 @@ public class ConnectionInvalidationTest
             conn.run( "assert unrecoverable", new HashMap<String,Value>(), Collector.NO_OP );
             fail( "Should've rethrown exception" );
         }
-        catch ( Neo4jException e )
+        catch ( PackStreamException e )
         {
             assertThat( e, equalTo( exception ) );
         }
@@ -181,7 +181,7 @@ public class ConnectionInvalidationTest
     }
 
     @SuppressWarnings( "unchecked" )
-    private void assertRecoverable( Neo4jException exception )
+    private void assertRecoverable( PackStreamException exception ) throws PackStreamException
     {
         doThrow( exception ).when( delegate ).run( eq( "assert recoverable" ), anyMap(), any( Collector.class ) );
 
@@ -191,7 +191,7 @@ public class ConnectionInvalidationTest
             conn.run( "assert recoverable", new HashMap<String,Value>(), Collector.NO_OP );
             fail( "Should've rethrown exception" );
         }
-        catch ( Neo4jException e )
+        catch ( PackStreamException e )
         {
             assertThat( e, equalTo( exception ) );
         }

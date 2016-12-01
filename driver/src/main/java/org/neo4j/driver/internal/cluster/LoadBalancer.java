@@ -21,6 +21,7 @@ package org.neo4j.driver.internal.cluster;
 import java.util.HashSet;
 
 import org.neo4j.driver.internal.RoutingErrorHandler;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
 import org.neo4j.driver.internal.net.BoltServerAddress;
 import org.neo4j.driver.internal.spi.Connection;
 import org.neo4j.driver.internal.spi.ConnectionPool;
@@ -116,8 +117,9 @@ public final class LoadBalancer implements RoutingErrorHandler, AutoCloseable
                 {
                     return connections.acquire( address );
                 }
-                catch ( ServiceUnavailableException e )
+                catch ( PackStreamException e )
                 {
+                    // TODO: quite possibly we should have different reactions here based on what the actual failure was
                     forget( address );
                 }
             }

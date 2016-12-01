@@ -19,14 +19,15 @@
 package org.neo4j.driver.internal.net;
 
 import java.io.IOException;
-import java.net.ConnectException;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
 import java.nio.channels.SocketChannel;
-import java.security.GeneralSecurityException;
 import java.util.Queue;
 
+import org.neo4j.driver.internal.exceptions.ConnectionException;
+import org.neo4j.driver.internal.exceptions.PackStreamException;
+import org.neo4j.driver.internal.exceptions.TunnellingSSLException;
 import org.neo4j.driver.internal.messaging.Message;
 import org.neo4j.driver.internal.messaging.MessageFormat;
 import org.neo4j.driver.internal.security.SecurityPlan;
@@ -34,9 +35,7 @@ import org.neo4j.driver.internal.security.TLSSocketChannel;
 import org.neo4j.driver.internal.util.BytePrinter;
 import org.neo4j.driver.v1.Logger;
 import org.neo4j.driver.v1.exceptions.ClientException;
-import org.neo4j.driver.v1.exceptions.ServiceUnavailableException;
 
-import static java.lang.String.format;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 
 public class SocketClient
@@ -70,79 +69,82 @@ public class SocketClient
         this.channel = channel;
     }
 
-    void blockingRead( ByteBuffer buf ) throws IOException
+    void blockingRead( ByteBuffer buf ) throws ConnectionException.ReadFailure, ConnectionException.SSLFailure
     {
         while(buf.hasRemaining())
         {
-            if (channel.read( buf ) < 0)
+            try
             {
-                try
+                if ( channel.read( buf ) < 0 )
                 {
-                    channel.close();
+                    ConnectionException.EndOfStream eos = new ConnectionException.EndOfStream(
+                            buf.limit(), BytePrinter.hex( buf ).trim() );
+                    try
+                    {
+                        channel.close();
+                    }
+                    catch ( IOException e )
+                    {
+                        // best effort
+                        eos.addSuppressed( e );
+                    }
+                    throw eos;
                 }
-                catch ( IOException e )
-                {
-                    // best effort
-                }
-                String bufStr = BytePrinter.hex( buf ).trim();
-                throw new ServiceUnavailableException( format(
-                        "Connection terminated while receiving data. This can happen due to network " +
-                        "instabilities, or due to restarts of the database. Expected %s bytes, received %s.",
-                        buf.limit(), bufStr.isEmpty() ? "none" : bufStr ) );
+            }
+            catch ( TunnellingSSLException e )
+            {
+                throw e.getCause();
+            }
+            catch ( IOException e )
+            {
+                throw new ConnectionException.ReadFailure( e );
             }
         }
     }
 
-    void blockingWrite( ByteBuffer buf ) throws IOException
+    void blockingWrite( ByteBuffer buf ) throws ConnectionException.WriteFailure, ConnectionException.SSLFailure
     {
         while(buf.hasRemaining())
         {
-            if (channel.write( buf ) < 0)
+            try
             {
-                try
+                if ( channel.write( buf ) < 0 )
                 {
-                    channel.close();
+                    ConnectionException.ConnectionClosed closed =
+                            new ConnectionException.ConnectionClosed( buf.limit(), BytePrinter.hex( buf ).trim() );
+                    try
+                    {
+                        channel.close();
+                    }
+                    catch ( IOException e )
+                    {
+                        // best effort
+                        closed.addSuppressed( e );
+                    }
+                    throw closed;
                 }
-                catch ( IOException e )
-                {
-                    // best effort
-                }
-                String bufStr = BytePrinter.hex( buf ).trim();
-                throw new ServiceUnavailableException( format(
-                        "Connection terminated while sending data. This can happen due to network " +
-                        "instabilities, or due to restarts of the database. Expected %s bytes, wrote %s.",
-                        buf.limit(), bufStr.isEmpty() ? "none" :bufStr ) );
+            }
+            catch ( TunnellingSSLException e )
+            {
+                throw e.getCause();
+            }
+            catch ( IOException e )
+            {
+                throw new ConnectionException.WriteFailure( e );
             }
         }
     }
 
-    public void start()
+    public void start() throws ConnectionException
     {
-        try
-        {
-            logger.debug( "~~ [CONNECT] %s", address );
-            setChannel( ChannelFactory.create( address, securityPlan, logger ) );
-            protocol = negotiateProtocol();
-            reader = protocol.reader();
-            writer = protocol.writer();
-        }
-        catch ( ConnectException e )
-        {
-            throw new ServiceUnavailableException( format(
-                    "Unable to connect to %s, ensure the database is running and that there is a " +
-                    "working network connection to it.", address ) );
-        }
-        catch ( IOException e )
-        {
-            throw new ClientException( "Unable to process request: " + e.getMessage(), e );
-        }
-        catch ( GeneralSecurityException e )
-        {
-            throw new ClientException( "Unable to establish ssl connection with server: " + e.getMessage(), e );
-        }
+        logger.debug( "~~ [CONNECT] %s", address );
+        setChannel( ChannelFactory.create( address, securityPlan, logger ) );
+        protocol = negotiateProtocol();
+        reader = protocol.reader();
+        writer = protocol.writer();
     }
 
-    public void send( Queue<Message> messages ) throws IOException
+    public void send( Queue<Message> messages ) throws PackStreamException.SerializationFailure
     {
         int messageCount = 0;
         while ( true )
@@ -165,7 +167,10 @@ public class SocketClient
         }
     }
 
-    public void receiveAll( SocketResponseHandler handler ) throws IOException
+    public void receiveAll( SocketResponseHandler handler ) throws
+            PackStreamException.DeserializationFailure,
+            PackStreamException.ServerFailure,
+            ConnectionException.ImproperlyClosed
     {
         // Wait until all pending requests have been replied to
         while ( handler.collectorsWaiting() > 0 )
@@ -174,7 +179,10 @@ public class SocketClient
         }
     }
 
-    public void receiveOne( SocketResponseHandler handler ) throws IOException
+    public void receiveOne( SocketResponseHandler handler ) throws
+            PackStreamException.DeserializationFailure,
+            PackStreamException.ServerFailure,
+            ConnectionException.ImproperlyClosed
     {
         reader.read( handler );
 
@@ -186,27 +194,26 @@ public class SocketClient
         }
     }
 
-    public void stop()
+    public void stop() throws ConnectionException.ImproperlyClosed
     {
-        try
+        if ( channel != null )
         {
-            if ( channel != null )
+            try
             {
                 channel.close();
+            }
+            catch ( IOException e )
+            {
+                if ( !e.getMessage().equals( "An existing connection was forcibly closed by the remote host" ) )
+                {
+                    // Swallow exceptions due to connection already closed by server, otherwise:
+                    throw new ConnectionException.ImproperlyClosed( e );
+                }
+            }
+            finally
+            {
                 setChannel( null );
                 logger.debug( "~~ [DISCONNECT]" );
-            }
-        }
-        catch ( IOException e )
-        {
-            //noinspection StatementWithEmptyBody
-            if ( e.getMessage().equals( "An existing connection was forcibly closed by the remote host" ) )
-            {
-                // Swallow this exception as it is caused by connection already closed by server
-            }
-            else
-            {
-                throw new ClientException( "Unable to close socket connection properly." + e.getMessage(), e );
             }
         }
     }
@@ -216,7 +223,7 @@ public class SocketClient
         return channel != null && channel.isOpen();
     }
 
-    private SocketProtocol negotiateProtocol() throws IOException
+    private SocketProtocol negotiateProtocol() throws ConnectionException
     {
         //Propose protocol versions
         ByteBuffer buf = ByteBuffer.allocate( 5 * 4 ).order( BIG_ENDIAN );
@@ -238,18 +245,13 @@ public class SocketClient
         {
             blockingRead( buf );
         }
-        catch ( ClientException e )
+        catch ( ConnectionException.ReadFailure readFailure )
         {
-            if ( buf.position() == 0 ) // failed to read any bytes
+            if ( buf.position() == 0 )
             {
-                throw new ClientException( format(
-                        "Failed to establish connection with server. Make sure that you have a server with bolt " +
-                        "enabled on %s", address ) );
+                throw new ConnectionException.CannotConnect( address, readFailure );
             }
-            else
-            {
-                throw e;
-            }
+            throw readFailure;
         }
         // Choose protocol, or fail
         buf.flip();
@@ -283,22 +285,25 @@ public class SocketClient
     private static class ChannelFactory
     {
         public static ByteChannel create( BoltServerAddress address, SecurityPlan securityPlan, Logger logger )
-                throws IOException, GeneralSecurityException
+                throws ConnectionException
         {
-            SocketChannel soChannel = SocketChannel.open();
-            soChannel.setOption( StandardSocketOptions.SO_REUSEADDR, true );
-            soChannel.setOption( StandardSocketOptions.SO_KEEPALIVE, true );
-            soChannel.connect( address.toSocketAddress() );
-
             ByteChannel channel;
+            try
+            {
+                SocketChannel soChannel = SocketChannel.open();
+                soChannel.setOption( StandardSocketOptions.SO_REUSEADDR, true );
+                soChannel.setOption( StandardSocketOptions.SO_KEEPALIVE, true );
+                soChannel.connect( address.toSocketAddress() );
+                channel = soChannel;
+            }
+            catch ( Exception e )
+            {
+                throw new ConnectionException.CannotConnect( address, e );
+            }
 
             if (securityPlan.requiresEncryption())
             {
-                channel = new TLSSocketChannel( address, securityPlan, soChannel, logger );
-            }
-            else
-            {
-                channel = soChannel;
+                channel = new TLSSocketChannel( address, securityPlan, channel, logger );
             }
 
             if ( logger.isTraceEnabled() )

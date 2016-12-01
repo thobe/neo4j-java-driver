@@ -18,8 +18,6 @@
  */
 package org.neo4j.driver.internal.messaging;
 
-import java.io.IOException;
-
 /**
  * RESET request message
  * <p>
@@ -39,7 +37,7 @@ public class ResetMessage implements Message
     public static final ResetMessage RESET = new ResetMessage();
 
     @Override
-    public void dispatch( MessageHandler handler ) throws IOException
+    public <Failure extends Exception> void dispatch( MessageHandler<Failure> handler ) throws Failure
     {
         handler.handleResetMessage();
     }
